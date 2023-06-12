@@ -1,3 +1,4 @@
+import os
 import logging
 import math
 import random
@@ -26,21 +27,22 @@ class CamLocDataset(Dataset):
     Access to image, calibration and ground truth data given a dataset directory.
     """
 
-    def __init__(self,
-                 root_dir,
-                 mode=0,
-                 sparse=False,
-                 augment=False,
-                 aug_rotation=15,
-                 aug_scale_min=2 / 3,
-                 aug_scale_max=3 / 2,
-                 aug_black_white=0.1,
-                 aug_color=0.3,
-                 image_height=480,
-                 use_half=True,
-                 num_clusters=None,
-                 cluster_idx=None,
-                 ):
+    def __init__(
+        self,
+        root_dir,
+        mode=0,
+        sparse=False,
+        augment=False,
+        aug_rotation=15,
+        aug_scale_min=2 / 3,
+        aug_scale_max=3 / 2,
+        aug_black_white=0.1,
+        aug_color=0.3,
+        image_height=480,
+        use_half=True,
+        num_clusters=None,
+        cluster_idx=None,
+    ):
         """Constructor.
 
         Parameters:
@@ -91,17 +93,26 @@ class CamLocDataset(Dataset):
                 raise ValueError("num_clusters must be at least 1")
 
             if self.cluster_idx is None:
-                raise ValueError("cluster_idx needs to be specified when num_clusters is set")
+                raise ValueError(
+                    "cluster_idx needs to be specified when num_clusters is set"
+                )
 
             if self.cluster_idx < 0 or self.cluster_idx >= self.num_clusters:
-                raise ValueError(f"cluster_idx needs to be between 0 and {self.num_clusters - 1}")
+                raise ValueError(
+                    f"cluster_idx needs to be between 0 and {self.num_clusters - 1}"
+                )
 
-        if self.eye and self.augment and (self.aug_rotation > 0 or self.aug_scale_min != 1 or self.aug_scale_max != 1):
+        if self.eye and self.augment and (self.aug_rotation > 0
+                                          or self.aug_scale_min != 1
+                                          or self.aug_scale_max != 1):
             # pre-generated eye coordinates cannot be augmented
-            _logger.warning("WARNING: Check your augmentation settings. Camera coordinates will not be augmented.")
+            _logger.warning(
+                "WARNING: Check your augmentation settings. Camera coordinates will not be augmented."
+            )
 
         # Setup data paths.
         root_dir = Path(root_dir)
+        self.root_dir = root_dir
 
         # Main folders.
         rgb_dir = root_dir / 'rgb'
@@ -132,13 +143,16 @@ class CamLocDataset(Dataset):
             self.coord_files = None
 
         if len(self.rgb_files) != len(self.pose_files):
-            raise RuntimeError('RGB file count does not match pose file count!')
+            raise RuntimeError(
+                'RGB file count does not match pose file count!')
 
         if len(self.rgb_files) != len(self.calibration_files):
-            raise RuntimeError('RGB file count does not match calibration file count!')
+            raise RuntimeError(
+                'RGB file count does not match calibration file count!')
 
         if self.coord_files and len(self.rgb_files) != len(self.coord_files):
-            raise RuntimeError('RGB file count does not match coordinate file count!')
+            raise RuntimeError(
+                'RGB file count does not match coordinate file count!')
 
         # Create grid of 2D pixel positions used when generating scene coordinates from depth.
         if self.init and not self.sparse:
@@ -152,13 +166,15 @@ class CamLocDataset(Dataset):
                 # transforms.ToPILImage(),
                 # transforms.Resize(int(self.image_height * scale_factor)),
                 transforms.Grayscale(),
-                transforms.ColorJitter(brightness=self.aug_black_white, contrast=self.aug_black_white),
+                transforms.ColorJitter(brightness=self.aug_black_white,
+                                       contrast=self.aug_black_white),
                 # saturation=self.aug_color, hue=self.aug_color),  # Disable colour augmentation.
                 transforms.ToTensor(),
                 transforms.Normalize(
-                    mean=[0.4],  # statistics calculated over 7scenes training set, should generalize fairly well
-                    std=[0.25]
-                ),
+                    mean=[
+                        0.4
+                    ],  # statistics calculated over 7scenes training set, should generalize fairly well
+                    std=[0.25]),
             ])
         else:
             self.image_transform = transforms.Compose([
@@ -167,9 +183,10 @@ class CamLocDataset(Dataset):
                 transforms.Grayscale(),
                 transforms.ToTensor(),
                 transforms.Normalize(
-                    mean=[0.4],  # statistics calculated over 7scenes training set, should generalize fairly well
-                    std=[0.25]
-                ),
+                    mean=[
+                        0.4
+                    ],  # statistics calculated over 7scenes training set, should generalize fairly well
+                    std=[0.25]),
             ])
 
         # We use this to iterate over all frames. If clustering is enabled this is used to filter them.
@@ -177,11 +194,16 @@ class CamLocDataset(Dataset):
 
         # If clustering is enabled.
         if self.num_clusters is not None:
-            _logger.info(f"Clustering the {len(self.rgb_files)} into {num_clusters} clusters.")
+            _logger.info(
+                f"Clustering the {len(self.rgb_files)} into {num_clusters} clusters."
+            )
             _, _, cluster_labels = self._cluster(num_clusters)
 
-            self.valid_file_indices = np.flatnonzero(cluster_labels == cluster_idx)
-            _logger.info(f"After clustering, chosen cluster: {cluster_idx}, Using {len(self.valid_file_indices)} images.")
+            self.valid_file_indices = np.flatnonzero(
+                cluster_labels == cluster_idx)
+            _logger.info(
+                f"After clustering, chosen cluster: {cluster_idx}, Using {len(self.valid_file_indices)} images."
+            )
 
         # Calculate mean camera center (using the valid frames only).
         self.mean_cam_center = self._compute_mean_camera_center()
@@ -189,9 +211,9 @@ class CamLocDataset(Dataset):
     @staticmethod
     def _create_prediction_grid():
         # Assumes all input images have a resolution smaller than 5000x5000.
-        prediction_grid = np.zeros((2,
-                                    math.ceil(5000 / Regressor.OUTPUT_SUBSAMPLE),
-                                    math.ceil(5000 / Regressor.OUTPUT_SUBSAMPLE)))
+        prediction_grid = np.zeros(
+            (2, math.ceil(5000 / Regressor.OUTPUT_SUBSAMPLE),
+             math.ceil(5000 / Regressor.OUTPUT_SUBSAMPLE)))
 
         for x in range(0, prediction_grid.shape[2]):
             for y in range(0, prediction_grid.shape[1]):
@@ -233,7 +255,9 @@ class CamLocDataset(Dataset):
             labels: For each image the cluster ID
         """
         num_images = len(self.pose_files)
-        _logger.info(f'Clustering a dataset with {num_images} frames into {num_clusters} clusters.')
+        _logger.info(
+            f'Clustering a dataset with {num_images} frames into {num_clusters} clusters.'
+        )
 
         # A tensor holding all camera centers used for clustering.
         cam_centers = np.zeros((num_images, 3), dtype=np.float32)
@@ -242,7 +266,8 @@ class CamLocDataset(Dataset):
             cam_centers[i] = pose[:3, 3]
 
         # Setup kMEans
-        criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 100, 0.1)
+        criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 100,
+                    0.1)
         flags = cv2.KMEANS_PP_CENTERS
 
         # Label of next cluster.
@@ -262,23 +287,28 @@ class CamLocDataset(Dataset):
             label_counter += 1
 
             # Split cluster.
-            cur_error, cur_labels, cur_centroids = cv2.kmeans(cur_cluster[0], 2, None, criteria, 10, flags)
+            cur_error, cur_labels, cur_centroids = cv2.kmeans(
+                cur_cluster[0], 2, None, criteria, 10, flags)
 
             # Update cluster list.
             cur_mask = (cur_labels == 0)[:, 0]
             cur_cam_centers0 = cur_cluster[0][cur_mask, :]
-            clusters.append((cur_cam_centers0, cur_cluster[1], cur_centroids[0]))
+            clusters.append(
+                (cur_cam_centers0, cur_cluster[1], cur_centroids[0]))
 
             cur_mask = (cur_labels == 1)[:, 0]
             cur_cam_centers1 = cur_cluster[0][cur_mask, :]
-            clusters.append((cur_cam_centers1, label_counter, cur_centroids[1]))
+            clusters.append(
+                (cur_cam_centers1, label_counter, cur_centroids[1]))
 
             cluster_labels = labels[labels == cur_cluster[1]]
             cluster_labels[cur_mask] = label_counter
             labels[labels == cur_cluster[1]] = cluster_labels
 
             # Sort updated list.
-            clusters = sorted(clusters, key=lambda cluster: cluster[0].shape[0], reverse=True)
+            clusters = sorted(clusters,
+                              key=lambda cluster: cluster[0].shape[0],
+                              reverse=True)
 
         # clusters are sorted but cluster indices are random, remap cluster indices to sorted indices
         remapped_labels = np.zeros(num_images)
@@ -310,23 +340,27 @@ class CamLocDataset(Dataset):
             cluster_centers[cluster[1]] = cam_data.mean(0)
 
             # Compute the distance of each cam from the cluster center. Then average and square.
-            cam_dists = np.broadcast_to(cluster_centers[cluster[1]][np.newaxis, :], (cam_num, 3))
+            cam_dists = np.broadcast_to(
+                cluster_centers[cluster[1]][np.newaxis, :], (cam_num, 3))
             cam_dists = cam_data - cam_dists
             cam_dists = np.linalg.norm(cam_dists, axis=1)
-            cam_dists = cam_dists ** 2
+            cam_dists = cam_dists**2
 
             cluster_sizes[cluster[1]] = cam_dists.mean()
 
-            _logger.info("Cluster %i: %.1fm, %.1fm, %.1fm, images: %i, mean squared dist: %f" % (
-                cluster[1], cluster_centers[cluster[1]][0], cluster_centers[cluster[1]][1], cluster_centers[cluster[1]][2],
-                cluster[0].shape[0], cluster_sizes[cluster[1]]))
+            _logger.info(
+                "Cluster %i: %.1fm, %.1fm, %.1fm, images: %i, mean squared dist: %f"
+                % (cluster[1], cluster_centers[cluster[1]][0],
+                   cluster_centers[cluster[1]][1],
+                   cluster_centers[cluster[1]][2], cluster[0].shape[0],
+                   cluster_sizes[cluster[1]]))
 
         _logger.info('Clustering done.')
 
         return cluster_centers, cluster_sizes, labels
 
     def _compute_mean_camera_center(self):
-        mean_cam_center = torch.zeros((3,))
+        mean_cam_center = torch.zeros((3, ))
 
         for idx in self.valid_file_indices:
             pose = self._load_pose(idx)
@@ -353,6 +387,10 @@ class CamLocDataset(Dataset):
         pose = torch.from_numpy(pose).float()
 
         return pose
+
+    def get_scene(self):
+        name = os.path.basename(os.path.dirname(self.root_dir))
+        return name
 
     def _get_single_item(self, idx, image_height):
         # Apply index indirection.
@@ -400,15 +438,21 @@ class CamLocDataset(Dataset):
 
             # Rotate input image and mask.
             image = self._rotate_image(image, angle, 1, 'reflect')
-            image_mask = self._rotate_image(image_mask, angle, order=1, mode='constant')
+            image_mask = self._rotate_image(image_mask,
+                                            angle,
+                                            order=1,
+                                            mode='constant')
 
             # If we loaded the GT scene coordinates.
             if self.init:
                 if self.sparse:
                     # rotate and scale initalization targets
-                    coords_w = math.ceil(image.size(2) / Regressor.OUTPUT_SUBSAMPLE)
-                    coords_h = math.ceil(image.size(1) / Regressor.OUTPUT_SUBSAMPLE)
-                    coords = F.interpolate(coords.unsqueeze(0), size=(coords_h, coords_w))[0]
+                    coords_w = math.ceil(
+                        image.size(2) / Regressor.OUTPUT_SUBSAMPLE)
+                    coords_h = math.ceil(
+                        image.size(1) / Regressor.OUTPUT_SUBSAMPLE)
+                    coords = F.interpolate(coords.unsqueeze(0),
+                                           size=(coords_h, coords_w))[0]
 
                     coords = self._rotate_image(coords, angle, 0)
                 else:
@@ -434,16 +478,17 @@ class CamLocDataset(Dataset):
             offsetX = int(Regressor.OUTPUT_SUBSAMPLE / 2)
             offsetY = int(Regressor.OUTPUT_SUBSAMPLE / 2)
 
-            coords = torch.zeros((
-                3,
-                math.ceil(image.shape[1] / Regressor.OUTPUT_SUBSAMPLE),
-                math.ceil(image.shape[2] / Regressor.OUTPUT_SUBSAMPLE)))
+            coords = torch.zeros(
+                (3, math.ceil(image.shape[1] / Regressor.OUTPUT_SUBSAMPLE),
+                 math.ceil(image.shape[2] / Regressor.OUTPUT_SUBSAMPLE)))
 
             # subsample to network output size
-            depth = depth[offsetY::Regressor.OUTPUT_SUBSAMPLE, offsetX::Regressor.OUTPUT_SUBSAMPLE]
+            depth = depth[offsetY::Regressor.OUTPUT_SUBSAMPLE,
+                          offsetX::Regressor.OUTPUT_SUBSAMPLE]
 
             # construct x and y coordinates of camera coordinate
-            xy = self.prediction_grid[:, :depth.shape[0], :depth.shape[1]].copy()
+            xy = self.prediction_grid[:, :depth.shape[0], :depth.
+                                      shape[1]].copy()
             # add random pixel shift
             xy[0] += offsetX
             xy[1] += offsetY
@@ -493,14 +538,16 @@ class CamLocDataset(Dataset):
         # Also need the inverse.
         intrinsics_inv = intrinsics.inverse()
 
-        return image, image_mask, pose, pose_inv, intrinsics, intrinsics_inv, coords, str(self.rgb_files[idx])
+        return image, image_mask, pose, pose_inv, intrinsics, intrinsics_inv, coords, str(
+            self.rgb_files[idx])
 
     def __len__(self):
         return len(self.valid_file_indices)
 
     def __getitem__(self, idx):
         if self.augment:
-            scale_factor = random.uniform(self.aug_scale_min, self.aug_scale_max)
+            scale_factor = random.uniform(self.aug_scale_min,
+                                          self.aug_scale_max)
             # scale_factor = 1 / scale_factor #inverse scale sampling, not used for ACE mapping
         else:
             scale_factor = 1
