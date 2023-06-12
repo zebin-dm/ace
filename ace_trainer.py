@@ -31,8 +31,11 @@ def set_seed(seed):
     np.random.seed(seed)
     random.seed(seed)
 
+
 class TrainerACE:
-    def __init__(self, options):
+
+    def __init__(self, options, config):
+        self.config = config
         self.options = options
 
         self.device = torch.device('cuda')
@@ -77,40 +80,45 @@ class TrainerACE:
             aug_rotation=self.options.aug_rotation,
             aug_scale_max=self.options.aug_scale,
             aug_scale_min=1 / self.options.aug_scale,
-            num_clusters=self.options.num_clusters,  # Optional clustering for Cambridge experiments.
-            cluster_idx=self.options.cluster_idx,    # Optional clustering for Cambridge experiments.
+            num_clusters=self.options.
+            num_clusters,  # Optional clustering for Cambridge experiments.
+            cluster_idx=self.options.
+            cluster_idx,  # Optional clustering for Cambridge experiments.
         )
 
-        _logger.info("Loaded training scan from: {} -- {} images, mean: {:.2f} {:.2f} {:.2f}".format(
-            self.options.scene,
-            len(self.dataset),
-            self.dataset.mean_cam_center[0],
-            self.dataset.mean_cam_center[1],
-            self.dataset.mean_cam_center[2]))
+        _logger.info(
+            "Loaded training scan from: {} -- {} images, mean: {:.2f} {:.2f} {:.2f}"
+            .format(self.options.scene, len(self.dataset),
+                    self.dataset.mean_cam_center[0],
+                    self.dataset.mean_cam_center[1],
+                    self.dataset.mean_cam_center[2]))
 
         # Create network using the state dict of the pretrained encoder.
-        encoder_state_dict = torch.load(self.options.encoder_path, map_location="cpu")
+        encoder_state_dict = torch.load(self.options.encoder_path,
+                                        map_location="cpu")
         self.regressor = Regressor.create_from_encoder(
             encoder_state_dict,
             mean=self.dataset.mean_cam_center,
             num_head_blocks=self.options.num_head_blocks,
-            use_homogeneous=self.options.use_homogeneous
-        )
-        _logger.info(f"Loaded pretrained encoder from: {self.options.encoder_path}")
+            use_homogeneous=self.options.use_homogeneous)
+        _logger.info(
+            f"Loaded pretrained encoder from: {self.options.encoder_path}")
 
         self.regressor = self.regressor.to(self.device)
         self.regressor.train()
 
         # Setup optimization parameters.
-        self.optimizer = optim.AdamW(self.regressor.parameters(), lr=self.options.learning_rate_min)
+        self.optimizer = optim.AdamW(self.regressor.parameters(),
+                                     lr=self.options.learning_rate_min)
 
         # Setup learning rate scheduler.
         steps_per_epoch = self.options.training_buffer_size // self.options.batch_size
-        self.scheduler = optim.lr_scheduler.OneCycleLR(self.optimizer,
-                                                       max_lr=self.options.learning_rate_max,
-                                                       epochs=self.options.epochs,
-                                                       steps_per_epoch=steps_per_epoch,
-                                                       cycle_momentum=False)
+        self.scheduler = optim.lr_scheduler.OneCycleLR(
+            self.optimizer,
+            max_lr=self.options.learning_rate_max,
+            epochs=self.options.epochs,
+            steps_per_epoch=steps_per_epoch,
+            cycle_momentum=False)
 
         # Gradient scaler in case we train with half precision.
         self.scaler = GradScaler(enabled=self.options.use_half)
@@ -121,7 +129,7 @@ class TrainerACE:
 
         # Compute total number of iterations.
         self.iterations = self.options.epochs * self.options.training_buffer_size // self.options.batch_size
-        self.iterations_output = 100 # print loss every n iterations, and (optionally) write a visualisation frame
+        self.iterations_output = 100  # print loss every n iterations, and (optionally) write a visualisation frame
 
         # Setup reprojection loss function.
         self.repro_loss = ReproLoss(
@@ -129,8 +137,7 @@ class TrainerACE:
             soft_clamp=self.options.repro_loss_soft_clamp,
             soft_clamp_min=self.options.repro_loss_soft_clamp_min,
             type=self.options.repro_loss_type,
-            circle_schedule=(self.options.repro_loss_schedule == 'circle')
-        )
+            circle_schedule=(self.options.repro_loss_schedule == 'circle'))
 
         # Will be filled at the beginning of the training process.
         self.training_buffer = None
@@ -139,13 +146,13 @@ class TrainerACE:
         if self.options.render_visualization:
             # infer rendering folder from map file name
             target_path = vutil.get_rendering_target_path(
-                self.options.render_target_path,
-                self.options.output_map_file)
+                self.options.render_target_path, self.options.output_map_file)
             self.ace_visualizer = ACEVisualizer(
                 target_path,
                 self.options.render_flipped_portrait,
                 self.options.render_map_depth_filter,
-                mapping_vis_error_threshold=self.options.render_map_error_threshold)
+                mapping_vis_error_threshold=self.options.
+                render_map_error_threshold)
         else:
             self.ace_visualizer = None
 
@@ -160,11 +167,9 @@ class TrainerACE:
 
             # Setup the ACE render pipeline.
             self.ace_visualizer.setup_mapping_visualisation(
-                self.dataset.pose_files,
-                self.dataset.rgb_files,
+                self.dataset.pose_files, self.dataset.rgb_files,
                 self.iterations // self.iterations_output + 1,
-                self.options.render_camera_z_offset
-            )
+                self.options.render_camera_z_offset)
 
         creating_buffer_time = 0.
         training_time = 0.
@@ -176,7 +181,9 @@ class TrainerACE:
         self.create_training_buffer()
         buffer_end_time = time.time()
         creating_buffer_time += buffer_end_time - buffer_start_time
-        _logger.info(f"Filled training buffer in {buffer_end_time - buffer_start_time:.1f}s.")
+        _logger.info(
+            f"Filled training buffer in {buffer_end_time - buffer_start_time:.1f}s."
+        )
 
         # Train the regression head.
         for self.epoch in range(self.options.epochs):
@@ -188,10 +195,11 @@ class TrainerACE:
         self.save_model()
 
         end_time = time.time()
-        _logger.info(f'Done without errors. '
-                     f'Creating buffer time: {creating_buffer_time:.1f} seconds. '
-                     f'Training time: {training_time:.1f} seconds. '
-                     f'Total time: {end_time - self.training_start:.1f} seconds.')
+        _logger.info(
+            f'Done without errors. '
+            f'Creating buffer time: {creating_buffer_time:.1f} seconds. '
+            f'Training time: {training_time:.1f} seconds. '
+            f'Total time: {end_time - self.training_start:.1f} seconds.')
 
         if self.ace_visualizer is not None:
 
@@ -201,21 +209,24 @@ class TrainerACE:
                 mode=0,
                 use_half=self.options.use_half,
                 image_height=self.options.image_resolution,
-                augment=False) # No data augmentation when visualizing the map
+                augment=False)  # No data augmentation when visualizing the map
 
             vis_dataset_loader = torch.utils.data.DataLoader(
                 vis_dataset,
-                shuffle=False, # Process data in order for a growing effect later when rendering
+                shuffle=
+                False,  # Process data in order for a growing effect later when rendering
                 num_workers=self.num_data_loader_workers)
 
-            self.ace_visualizer.finalize_mapping(self.regressor, vis_dataset_loader)
+            self.ace_visualizer.finalize_mapping(self.regressor,
+                                                 vis_dataset_loader)
 
     def create_training_buffer(self):
         # Disable benchmarking, since we have variable tensor sizes.
         torch.backends.cudnn.benchmark = False
 
         # Sampler.
-        batch_sampler = sampler.BatchSampler(sampler.RandomSampler(self.dataset, generator=self.batch_generator),
+        batch_sampler = sampler.BatchSampler(sampler.RandomSampler(
+            self.dataset, generator=self.batch_generator),
                                              batch_size=1,
                                              drop_last=False)
 
@@ -223,36 +234,50 @@ class TrainerACE:
         def seed_worker(worker_id):
             # Different seed per epoch. Initial seed is generated by the main process consuming one random number from
             # the dataloader generator.
-            worker_seed = torch.initial_seed() % 2 ** 32
+            worker_seed = torch.initial_seed() % 2**32
             np.random.seed(worker_seed)
             random.seed(worker_seed)
 
         # Batching is handled at the dataset level (the dataset __getitem__ receives a list of indices, because we
         # need to rescale all images in the batch to the same size).
-        training_dataloader = DataLoader(dataset=self.dataset,
-                                         sampler=batch_sampler,
-                                         batch_size=None,
-                                         worker_init_fn=seed_worker,
-                                         generator=self.loader_generator,
-                                         pin_memory=True,
-                                         num_workers=self.num_data_loader_workers,
-                                         persistent_workers=self.num_data_loader_workers > 0,
-                                         timeout=60 if self.num_data_loader_workers > 0 else 0,
-                                         )
+        training_dataloader = DataLoader(
+            dataset=self.dataset,
+            sampler=batch_sampler,
+            batch_size=None,
+            worker_init_fn=seed_worker,
+            generator=self.loader_generator,
+            pin_memory=True,
+            num_workers=self.num_data_loader_workers,
+            persistent_workers=self.num_data_loader_workers > 0,
+            timeout=60 if self.num_data_loader_workers > 0 else 0,
+        )
 
         _logger.info("Starting creation of the training buffer.")
 
         # Create a training buffer that lives on the GPU.
         self.training_buffer = {
-            'features': torch.empty((self.options.training_buffer_size, self.regressor.feature_dim),
-                                    dtype=(torch.float32, torch.float16)[self.options.use_half], device=self.device),
-            'target_px': torch.empty((self.options.training_buffer_size, 2), dtype=torch.float32, device=self.device),
-            'gt_poses_inv': torch.empty((self.options.training_buffer_size, 3, 4), dtype=torch.float32,
-                                        device=self.device),
-            'intrinsics': torch.empty((self.options.training_buffer_size, 3, 3), dtype=torch.float32,
-                                      device=self.device),
-            'intrinsics_inv': torch.empty((self.options.training_buffer_size, 3, 3), dtype=torch.float32,
-                                          device=self.device)
+            'features':
+            torch.empty(
+                (self.options.training_buffer_size,
+                 self.regressor.feature_dim),
+                dtype=(torch.float32, torch.float16)[self.options.use_half],
+                device=self.device),
+            'target_px':
+            torch.empty((self.options.training_buffer_size, 2),
+                        dtype=torch.float32,
+                        device=self.device),
+            'gt_poses_inv':
+            torch.empty((self.options.training_buffer_size, 3, 4),
+                        dtype=torch.float32,
+                        device=self.device),
+            'intrinsics':
+            torch.empty((self.options.training_buffer_size, 3, 3),
+                        dtype=torch.float32,
+                        device=self.device),
+            'intrinsics_inv':
+            torch.empty((self.options.training_buffer_size, 3, 3),
+                        dtype=torch.float32,
+                        device=self.device)
         }
 
         # Features are computed in evaluation mode.
@@ -270,10 +295,14 @@ class TrainerACE:
 
                     # Copy to device.
                     image_B1HW = image_B1HW.to(self.device, non_blocking=True)
-                    image_mask_B1HW = image_mask_B1HW.to(self.device, non_blocking=True)
-                    gt_pose_inv_B44 = gt_pose_inv_B44.to(self.device, non_blocking=True)
-                    intrinsics_B33 = intrinsics_B33.to(self.device, non_blocking=True)
-                    intrinsics_inv_B33 = intrinsics_inv_B33.to(self.device, non_blocking=True)
+                    image_mask_B1HW = image_mask_B1HW.to(self.device,
+                                                         non_blocking=True)
+                    gt_pose_inv_B44 = gt_pose_inv_B44.to(self.device,
+                                                         non_blocking=True)
+                    intrinsics_B33 = intrinsics_B33.to(self.device,
+                                                       non_blocking=True)
+                    intrinsics_inv_B33 = intrinsics_inv_B33.to(
+                        self.device, non_blocking=True)
 
                     # Compute image features.
                     with autocast(enabled=self.options.use_half):
@@ -283,7 +312,9 @@ class TrainerACE:
                     B, C, H, W = features_BCHW.shape
 
                     # The image_mask needs to be downsampled to the actual output resolution and cast to bool.
-                    image_mask_B1HW = TF.resize(image_mask_B1HW, [H, W], interpolation=TF.InterpolationMode.NEAREST)
+                    image_mask_B1HW = TF.resize(
+                        image_mask_B1HW, [H, W],
+                        interpolation=TF.InterpolationMode.NEAREST)
                     image_mask_B1HW = image_mask_B1HW.bool()
 
                     # If the current mask has no valid pixels, continue.
@@ -291,21 +322,28 @@ class TrainerACE:
                         continue
 
                     # Create a tensor with the pixel coordinates of every feature vector.
-                    pixel_positions_B2HW = self.pixel_grid_2HW[:, :H, :W].clone()  # It's 2xHxW (actual H and W) now.
-                    pixel_positions_B2HW = pixel_positions_B2HW[None]  # 1x2xHxW
-                    pixel_positions_B2HW = pixel_positions_B2HW.expand(B, 2, H, W)  # Bx2xHxW
+                    pixel_positions_B2HW = self.pixel_grid_2HW[:, :H, :W].clone(
+                    )  # It's 2xHxW (actual H and W) now.
+                    pixel_positions_B2HW = pixel_positions_B2HW[
+                        None]  # 1x2xHxW
+                    pixel_positions_B2HW = pixel_positions_B2HW.expand(
+                        B, 2, H, W)  # Bx2xHxW
 
                     # Bx3x4 -> Nx3x4 (for each image, repeat pose per feature)
                     gt_pose_inv = gt_pose_inv_B44[:, :3]
-                    gt_pose_inv = gt_pose_inv.unsqueeze(1).expand(B, H * W, 3, 4).reshape(-1, 3, 4)
+                    gt_pose_inv = gt_pose_inv.unsqueeze(1).expand(
+                        B, H * W, 3, 4).reshape(-1, 3, 4)
 
                     # Bx3x3 -> Nx3x3 (for each image, repeat intrinsics per feature)
-                    intrinsics = intrinsics_B33.unsqueeze(1).expand(B, H * W, 3, 3).reshape(-1, 3, 3)
-                    intrinsics_inv = intrinsics_inv_B33.unsqueeze(1).expand(B, H * W, 3, 3).reshape(-1, 3, 3)
+                    intrinsics = intrinsics_B33.unsqueeze(1).expand(
+                        B, H * W, 3, 3).reshape(-1, 3, 3)
+                    intrinsics_inv = intrinsics_inv_B33.unsqueeze(1).expand(
+                        B, H * W, 3, 3).reshape(-1, 3, 3)
 
                     def normalize_shape(tensor_in):
                         """Bring tensor from shape BxCxHxW to NxC"""
-                        return tensor_in.transpose(0, 1).flatten(1).transpose(0, 1)
+                        return tensor_in.transpose(0, 1).flatten(1).transpose(
+                            0, 1)
 
                     batch_data = {
                         'features': normalize_shape(features_BCHW),
@@ -321,13 +359,16 @@ class TrainerACE:
 
                     # Over-sample according to image mask.
                     features_to_select = self.options.samples_per_image * B
-                    features_to_select = min(features_to_select, self.options.training_buffer_size - buffer_idx)
+                    features_to_select = min(
+                        features_to_select,
+                        self.options.training_buffer_size - buffer_idx)
 
                     # Sample indices uniformly, with replacement.
-                    sample_idxs = torch.multinomial(image_mask_N1.view(-1),
-                                                    features_to_select,
-                                                    replacement=True,
-                                                    generator=self.sampling_generator)
+                    sample_idxs = torch.multinomial(
+                        image_mask_N1.view(-1),
+                        features_to_select,
+                        replacement=True,
+                        generator=self.sampling_generator)
 
                     # Select the data to put in the buffer.
                     for k in batch_data:
@@ -336,16 +377,22 @@ class TrainerACE:
                     # Write to training buffer. Start at buffer_idx and end at buffer_offset - 1.
                     buffer_offset = buffer_idx + features_to_select
                     for k in batch_data:
-                        self.training_buffer[k][buffer_idx:buffer_offset] = batch_data[k]
+                        self.training_buffer[k][
+                            buffer_idx:buffer_offset] = batch_data[k]
 
                     buffer_idx = buffer_offset
                     if buffer_idx >= self.options.training_buffer_size:
                         break
 
-        buffer_memory = sum([v.element_size() * v.nelement() for k, v in self.training_buffer.items()])
+        buffer_memory = sum([
+            v.element_size() * v.nelement()
+            for k, v in self.training_buffer.items()
+        ])
         buffer_memory /= 1024 * 1024 * 1024
 
-        _logger.info(f"Created buffer of {buffer_memory:.2f}GB with {dataset_passes} passes over the training data.")
+        _logger.info(
+            f"Created buffer of {buffer_memory:.2f}GB with {dataset_passes} passes over the training data."
+        )
         self.regressor.train()
 
     def run_epoch(self):
@@ -356,10 +403,12 @@ class TrainerACE:
         torch.backends.cudnn.benchmark = True
 
         # Shuffle indices.
-        random_indices = torch.randperm(self.options.training_buffer_size, generator=self.training_generator)
+        random_indices = torch.randperm(self.options.training_buffer_size,
+                                        generator=self.training_generator)
 
         # Iterate with mini batches.
-        for batch_start in range(0, self.options.training_buffer_size, self.options.batch_size):
+        for batch_start in range(0, self.options.training_buffer_size,
+                                 self.options.batch_size):
             batch_end = batch_start + self.options.batch_size
 
             # Drop last batch if not full.
@@ -371,15 +420,20 @@ class TrainerACE:
 
             # Call the training step with the sampled features and relevant metadata.
             self.training_step(
-                self.training_buffer['features'][random_batch_indices].contiguous(),
-                self.training_buffer['target_px'][random_batch_indices].contiguous(),
-                self.training_buffer['gt_poses_inv'][random_batch_indices].contiguous(),
-                self.training_buffer['intrinsics'][random_batch_indices].contiguous(),
-                self.training_buffer['intrinsics_inv'][random_batch_indices].contiguous()
-            )
+                self.training_buffer['features']
+                [random_batch_indices].contiguous(),
+                self.training_buffer['target_px']
+                [random_batch_indices].contiguous(),
+                self.training_buffer['gt_poses_inv']
+                [random_batch_indices].contiguous(),
+                self.training_buffer['intrinsics']
+                [random_batch_indices].contiguous(),
+                self.training_buffer['intrinsics_inv']
+                [random_batch_indices].contiguous())
             self.iteration += 1
 
-    def training_step(self, features_bC, target_px_b2, gt_inv_poses_b34, Ks_b33, invKs_b33):
+    def training_step(self, features_bC, target_px_b2, gt_inv_poses_b34,
+                      Ks_b33, invKs_b33):
         """
         Run one iteration of training, computing the reprojection error and minimising it.
         """
@@ -387,18 +441,23 @@ class TrainerACE:
         channels = features_bC.shape[1]
 
         # Reshape to a "fake" BCHW shape, since it's faster to run through the network compared to the original shape.
-        features_bCHW = features_bC[None, None, ...].view(-1, 16, 32, channels).permute(0, 3, 1, 2)
+        features_bCHW = features_bC[None, None,
+                                    ...].view(-1, 16, 32,
+                                              channels).permute(0, 3, 1, 2)
         with autocast(enabled=self.options.use_half):
-            pred_scene_coords_b3HW = self.regressor.get_scene_coordinates(features_bCHW)
+            pred_scene_coords_b3HW = self.regressor.get_scene_coordinates(
+                features_bCHW)
 
         # Back to the original shape. Convert to float32 as well.
-        pred_scene_coords_b31 = pred_scene_coords_b3HW.permute(0, 2, 3, 1).flatten(0, 2).unsqueeze(-1).float()
+        pred_scene_coords_b31 = pred_scene_coords_b3HW.permute(
+            0, 2, 3, 1).flatten(0, 2).unsqueeze(-1).float()
 
         # Make 3D points homogeneous so that we can easily matrix-multiply them.
         pred_scene_coords_b41 = to_homogeneous(pred_scene_coords_b31)
 
         # Scene coordinates to camera coordinates.
-        pred_cam_coords_b31 = torch.bmm(gt_inv_poses_b34, pred_scene_coords_b41)
+        pred_cam_coords_b31 = torch.bmm(gt_inv_poses_b34,
+                                        pred_scene_coords_b41)
 
         # Project scene coordinates.
         pred_px_b31 = torch.bmm(Ks_b33, pred_cam_coords_b31)
@@ -413,34 +472,44 @@ class TrainerACE:
 
         # Measure reprojection error.
         reprojection_error_b2 = pred_px_b21.squeeze() - target_px_b2
-        reprojection_error_b1 = torch.norm(reprojection_error_b2, dim=1, keepdim=True, p=1)
+        reprojection_error_b1 = torch.norm(reprojection_error_b2,
+                                           dim=1,
+                                           keepdim=True,
+                                           p=1)
 
         #
         # Compute masks used to ignore invalid pixels.
         #
         # Predicted coordinates behind or close to camera plane.
-        invalid_min_depth_b1 = pred_cam_coords_b31[:, 2] < self.options.depth_min
+        invalid_min_depth_b1 = pred_cam_coords_b31[:,
+                                                   2] < self.options.depth_min
         # Very large reprojection errors.
         invalid_repro_b1 = reprojection_error_b1 > self.options.repro_loss_hard_clamp
         # Predicted coordinates beyond max distance.
-        invalid_max_depth_b1 = pred_cam_coords_b31[:, 2] > self.options.depth_max
+        invalid_max_depth_b1 = pred_cam_coords_b31[:,
+                                                   2] > self.options.depth_max
 
         # Invalid mask is the union of all these. Valid mask is the opposite.
-        invalid_mask_b1 = (invalid_min_depth_b1 | invalid_repro_b1 | invalid_max_depth_b1)
+        invalid_mask_b1 = (invalid_min_depth_b1 | invalid_repro_b1
+                           | invalid_max_depth_b1)
         valid_mask_b1 = ~invalid_mask_b1
 
         # Reprojection error for all valid scene coordinates.
         valid_reprojection_error_b1 = reprojection_error_b1[valid_mask_b1]
         # Compute the loss for valid predictions.
-        loss_valid = self.repro_loss.compute(valid_reprojection_error_b1, self.iteration)
+        loss_valid = self.repro_loss.compute(valid_reprojection_error_b1,
+                                             self.iteration)
 
         # Handle the invalid predictions: generate proxy coordinate targets with constant depth assumption.
         pixel_grid_crop_b31 = to_homogeneous(target_px_b2.unsqueeze(2))
-        target_camera_coords_b31 = self.options.depth_target * torch.bmm(invKs_b33, pixel_grid_crop_b31)
+        target_camera_coords_b31 = self.options.depth_target * torch.bmm(
+            invKs_b33, pixel_grid_crop_b31)
 
         # Compute the distance to target camera coordinates.
         invalid_mask_b11 = invalid_mask_b1.unsqueeze(2)
-        loss_invalid = torch.abs(target_camera_coords_b31 - pred_cam_coords_b31).masked_select(invalid_mask_b11).sum()
+        loss_invalid = torch.abs(target_camera_coords_b31 -
+                                 pred_cam_coords_b31).masked_select(
+                                     invalid_mask_b11).sum()
 
         # Final loss is the sum of all 2.
         loss = loss_valid + loss_invalid
@@ -461,13 +530,18 @@ class TrainerACE:
             fraction_valid = float(valid_mask_b1.sum() / batch_size)
             # median_depth = float(pred_cam_coords_b31[:, 2].median())
 
-            _logger.info(f'Iteration: {self.iteration:6d} / Epoch {self.epoch:03d}|{self.options.epochs:03d}, '
-                         f'Loss: {loss:.1f}, Valid: {fraction_valid * 100:.1f}%, Time: {time_since_start:.2f}s')
+            _logger.info(
+                f'Iteration: {self.iteration:6d} / Epoch {self.epoch:03d}|{self.options.epochs:03d}, '
+                f'Loss: {loss:.1f}, Valid: {fraction_valid * 100:.1f}%, Time: {time_since_start:.2f}s'
+            )
 
             if self.ace_visualizer is not None:
-                vis_scene_coords = pred_scene_coords_b31.detach().cpu().squeeze().numpy()
-                vis_errors = reprojection_error_b1.detach().cpu().squeeze().numpy()
-                self.ace_visualizer.render_mapping_frame(vis_scene_coords, vis_errors)
+                vis_scene_coords = pred_scene_coords_b31.detach().cpu(
+                ).squeeze().numpy()
+                vis_errors = reprojection_error_b1.detach().cpu().squeeze(
+                ).numpy()
+                self.ace_visualizer.render_mapping_frame(
+                    vis_scene_coords, vis_errors)
 
         # Only step if the optimizer stepped and if we're not over-stepping the total_steps supported by the scheduler.
         if old_optimizer_step < self.optimizer._step_count < self.scheduler.total_steps:
@@ -483,4 +557,5 @@ class TrainerACE:
         for k, v in head_state_dict.items():
             head_state_dict[k] = head_state_dict[k].half()
         torch.save(head_state_dict, self.options.output_map_file)
-        _logger.info(f"Saved trained head weights to: {self.options.output_map_file}")
+        _logger.info(
+            f"Saved trained head weights to: {self.options.output_map_file}")
