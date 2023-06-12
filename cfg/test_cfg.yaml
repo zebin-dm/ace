@@ -1,3 +1,29 @@
 
-data_cfg:
+test_data_cfg:
   type: CamLocDataset
+  root_dir: /mnt/nas/share-all/caizebin/03.dataset/ace/7scenes_ace/7scenes_chess/test
+  mode: 0 
+  image_height: 480
+
+
+train_data_cfg:
+  type: CamLocDataset
+  root_dir: /mnt/nas/share-all/caizebin/03.dataset/ace/7scenes_ace/7scenes_chess/train
+  mode: 0 
+  image_height: 480
+
+
+net_cfg:
+  type: NetConfig
+  encoder_path: /mnt/nas/share-all/caizebin/03.dataset/ace/pretrained/ace_encoder_pretrained.pt
+  head_path: /mnt/nas/share-all/caizebin/03.dataset/ace/pretrained/ace_models/7Scenes/7scenes_chess.pt
+
+dsac_cfg:
+  type: DSACStarConfig
+
+render_cfg:
+  type: RenderConfig
+
+exp_cfg:
+  type: ExperimentConfig
+  ouput_dir: ./output/test_7scenes_chess
