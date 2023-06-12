@@ -117,7 +117,7 @@ if __name__ == '__main__':
                     network.OUTPUT_SUBSAMPLE,
                 )
 
-                # Calculate translation error.
+                # Calculate translation error
                 t_err = float(torch.norm(gt_pose_44[0:3, 3] -
                                          out_pose[0:3, 3]))
 
