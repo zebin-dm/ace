@@ -3,6 +3,7 @@ dist
 dsacstar/build
 dsacstar/dist
 *.egg-info
+.vscode
 
 # Dataset files.
 datasets/7scenes_*

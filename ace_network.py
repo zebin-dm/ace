@@ -1,20 +1,16 @@
 # Copyright © Niantic, Inc. 2022.
 
-import logging
 import math
 import re
-
+from loguru import logger
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
-_logger = logging.getLogger(__name__)
 
 
 class Encoder(nn.Module):
     """
     FCN encoder, used to extract features from the input images.
-
     The number of output channels is configurable, the default used in the paper is 512.
     """
 
@@ -78,13 +74,16 @@ class Head(nn.Module):
         self.head_channels = 512  # Hardcoded.
 
         # We may need a skip layer if the number of features output by the encoder is different.
-        self.head_skip = nn.Identity() if self.in_channels == self.head_channels else nn.Conv2d(self.in_channels,
-                                                                                                self.head_channels, 1,
-                                                                                                1, 0)
+        self.head_skip = nn.Identity(
+        ) if self.in_channels == self.head_channels else nn.Conv2d(
+            self.in_channels, self.head_channels, 1, 1, 0)
 
-        self.res3_conv1 = nn.Conv2d(self.in_channels, self.head_channels, 1, 1, 0)
-        self.res3_conv2 = nn.Conv2d(self.head_channels, self.head_channels, 1, 1, 0)
-        self.res3_conv3 = nn.Conv2d(self.head_channels, self.head_channels, 1, 1, 0)
+        self.res3_conv1 = nn.Conv2d(self.in_channels, self.head_channels, 1, 1,
+                                    0)
+        self.res3_conv2 = nn.Conv2d(self.head_channels, self.head_channels, 1,
+                                    1, 0)
+        self.res3_conv3 = nn.Conv2d(self.head_channels, self.head_channels, 1,
+                                    1, 0)
 
         self.res_blocks = []
 
@@ -95,9 +94,12 @@ class Head(nn.Module):
                 nn.Conv2d(self.head_channels, self.head_channels, 1, 1, 0),
             ))
 
-            super(Head, self).add_module(str(block) + 'c0', self.res_blocks[block][0])
-            super(Head, self).add_module(str(block) + 'c1', self.res_blocks[block][1])
-            super(Head, self).add_module(str(block) + 'c2', self.res_blocks[block][2])
+            super(Head, self).add_module(
+                str(block) + 'c0', self.res_blocks[block][0])
+            super(Head, self).add_module(
+                str(block) + 'c1', self.res_blocks[block][1])
+            super(Head, self).add_module(
+                str(block) + 'c2', self.res_blocks[block][2])
 
         self.fc1 = nn.Conv2d(self.head_channels, self.head_channels, 1, 1, 0)
         self.fc2 = nn.Conv2d(self.head_channels, self.head_channels, 1, 1, 0)
@@ -106,10 +108,13 @@ class Head(nn.Module):
             self.fc3 = nn.Conv2d(self.head_channels, 4, 1, 1, 0)
 
             # Use buffers because they need to be saved in the state dict.
-            self.register_buffer("max_scale", torch.tensor([homogeneous_max_scale]))
-            self.register_buffer("min_scale", torch.tensor([homogeneous_min_scale]))
+            self.register_buffer("max_scale",
+                                 torch.tensor([homogeneous_max_scale]))
+            self.register_buffer("min_scale",
+                                 torch.tensor([homogeneous_min_scale]))
             self.register_buffer("max_inv_scale", 1. / self.max_scale)
-            self.register_buffer("h_beta", math.log(2) / (1. - self.max_inv_scale))
+            self.register_buffer("h_beta",
+                                 math.log(2) / (1. - self.max_inv_scale))
             self.register_buffer("min_inv_scale", 1. / self.min_scale)
         else:
             self.fc3 = nn.Conv2d(self.head_channels, 3, 1, 1, 0)
@@ -139,7 +144,8 @@ class Head(nn.Module):
         if self.use_homogeneous:
             # Dehomogenize coords:
             # Softplus ensures we have a smooth homogeneous parameter with a minimum value = self.max_inv_scale.
-            h_slice = F.softplus(sc[:, 3, :, :].unsqueeze(1), beta=self.h_beta.item()) + self.max_inv_scale
+            h_slice = F.softplus(sc[:, 3, :, :].unsqueeze(1),
+                                 beta=self.h_beta.item()) + self.max_inv_scale
             h_slice.clamp_(max=self.min_inv_scale)
             sc = sc[:, :3] / h_slice
 
@@ -152,13 +158,16 @@ class Head(nn.Module):
 class Regressor(nn.Module):
     """
     FCN architecture for scene coordinate regression.
-
     The network predicts a 3d scene coordinates, the output is subsampled by a factor of 8 compared to the input.
     """
 
     OUTPUT_SUBSAMPLE = 8
 
-    def __init__(self, mean, num_head_blocks, use_homogeneous, num_encoder_features=512):
+    def __init__(self,
+                 mean,
+                 num_head_blocks,
+                 use_homogeneous,
+                 num_encoder_features=512):
         """
         Constructor.
 
@@ -172,10 +181,14 @@ class Regressor(nn.Module):
         self.feature_dim = num_encoder_features
 
         self.encoder = Encoder(out_channels=self.feature_dim)
-        self.heads = Head(mean, num_head_blocks, use_homogeneous, in_channels=self.feature_dim)
+        self.heads = Head(mean,
+                          num_head_blocks,
+                          use_homogeneous,
+                          in_channels=self.feature_dim)
 
     @classmethod
-    def create_from_encoder(cls, encoder_state_dict, mean, num_head_blocks, use_homogeneous):
+    def create_from_encoder(cls, encoder_state_dict, mean, num_head_blocks,
+                            use_homogeneous):
         """
         Create a regressor using a pretrained encoder, loading encoder-specific parameters from the state dict.
 
@@ -189,8 +202,11 @@ class Regressor(nn.Module):
         num_encoder_features = encoder_state_dict['res2_conv3.weight'].shape[0]
 
         # Create a regressor.
-        _logger.info(f"Creating Regressor using pretrained encoder with {num_encoder_features} feature size.")
-        regressor = cls(mean, num_head_blocks, use_homogeneous, num_encoder_features)
+        logger.info(
+            f"Creating Regressor using pretrained encoder with {num_encoder_features} feature size."
+        )
+        regressor = cls(mean, num_head_blocks, use_homogeneous,
+                        num_encoder_features)
 
         # Load encoder weights.
         regressor.encoder.load_state_dict(encoder_state_dict)
@@ -206,7 +222,7 @@ class Regressor(nn.Module):
         state_dict: pretrained state dictionary.
         """
         # Mean is zero (will be loaded from the state dict).
-        mean = torch.zeros((3,))
+        mean = torch.zeros((3, ))
 
         # Count how many head blocks are in the dictionary.
         pattern = re.compile(r"^heads\.\d+c0\.weight$")
@@ -219,11 +235,12 @@ class Regressor(nn.Module):
         num_encoder_features = state_dict['encoder.res2_conv3.weight'].shape[0]
 
         # Create a regressor.
-        _logger.info(f"Creating regressor from pretrained state_dict:"
-                     f"\n\tNum head blocks: {num_head_blocks}"
-                     f"\n\tHomogeneous coordinates: {use_homogeneous}"
-                     f"\n\tEncoder feature size: {num_encoder_features}")
-        regressor = cls(mean, num_head_blocks, use_homogeneous, num_encoder_features)
+        logger.info(f"Creating regressor from pretrained state_dict:"
+                    f"\n\tNum head blocks: {num_head_blocks}"
+                    f"\n\tHomogeneous coordinates: {use_homogeneous}"
+                    f"\n\tEncoder feature size: {num_encoder_features}")
+        regressor = cls(mean, num_head_blocks, use_homogeneous,
+                        num_encoder_features)
 
         # Load all weights.
         regressor.load_state_dict(state_dict)
