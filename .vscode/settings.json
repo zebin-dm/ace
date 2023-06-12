@@ -1,0 +1,35 @@
+{
+    {
+        "python.linting.flake8Enabled": true,
+        "python.linting.pylintEnabled": false,
+        "python.linting.enabled": true,
+        "python.formatting.provider": "yapf",
+        "files.exclude": {
+            "**/.git": true,
+            "**/.svn": true,
+            "**/.hg": true,
+            "**/CVS": true,
+            "**/.DS_Store": true,
+            "**/Thumbs.db": true,
+            "**/__pycache__": true
+        },
+        "githubPullRequests.queries": [
+            {
+                "label": "Waiting For My Review",
+                "query": "is:open review-requested:${user}"
+            },
+            {
+                "label": "Assigned To Me",
+                "query": "is:open assignee:${user}"
+            },
+            {
+                "label": "Created By Me",
+                "query": "is:open author:${user}"
+            },
+            {
+                "label": "Mentioned Me",
+                "query": "is:open mentions:${user}"
+            }
+        ]
+    }
+}

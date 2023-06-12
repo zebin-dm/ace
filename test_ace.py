@@ -15,6 +15,7 @@ from torch.utils.data import DataLoader
 
 import dsacstar
 import ace_vis_util as vutil
+from utils.metric import Metric
 from ace_network import Regressor
 from dataset import CamLocDataset
 from ace_visualizer import ACEVisualizer
@@ -184,30 +185,17 @@ if __name__ == '__main__':
     # Save the outputs in the same folder as the network being evaluated.
     output_dir = head_network_path.parent
     scene_name = scene_path.name
-    # This will contain aggregate scene stats (median translation/rotation errors, and avg processing time per frame).
-    test_log_file = output_dir / f'test_{scene_name}_{opt.session}.txt'
-    logger.info(f"Saving test aggregate statistics to: {test_log_file}")
+
     # This will contain each frame's pose (stored as quaternion + translation) and errors.
     pose_log_file = output_dir / f'poses_{scene_name}_{opt.session}.txt'
     logger.info(f"Saving per-frame poses and errors to: {pose_log_file}")
 
     # Setup output files.
-    test_log = open(test_log_file, 'w', 1)
     pose_log = open(pose_log_file, 'w', 1)
 
     # Metrics of interest.
     avg_batch_time = 0
     num_batches = 0
-
-    # Keep track of rotation and translation errors for calculation of the median error.
-    rErrs = []
-    tErrs = []
-
-    # Percentage of frames predicted within certain thresholds from their GT pose.
-    pct10_5 = 0
-    pct5 = 0
-    pct2 = 0
-    pct1 = 0
 
     # Generate video of training process
     if opt.render_visualization:
@@ -238,7 +226,7 @@ if __name__ == '__main__':
             reloc_frame_skip=opt.render_frame_skip)
     else:
         ace_visualizer = None
-
+    metric = Metric()
     # Testing loop.
     testing_start_time = time.time()
     with torch.no_grad():
@@ -314,20 +302,7 @@ if __name__ == '__main__':
                         est_error=max(r_err, t_err * 100),
                         sparse_query=opt.render_sparse_queries)
 
-                # Save the errors.
-                rErrs.append(r_err)
-                tErrs.append(t_err * 100)
-
-                # Check various thresholds.
-                if r_err < 5 and t_err < 0.1:  # 10cm/5deg
-                    pct10_5 += 1
-                if r_err < 5 and t_err < 0.05:  # 5cm/5deg
-                    pct5 += 1
-                if r_err < 2 and t_err < 0.02:  # 2cm/2deg
-                    pct2 += 1
-                if r_err < 1 and t_err < 0.01:  # 1cm/1deg
-                    pct1 += 1
-
+                metric.update(t_err, r_err)
                 # Write estimated pose to pose file (inverse).
                 out_pose = out_pose.inverse()
 
@@ -353,37 +328,5 @@ if __name__ == '__main__':
             avg_batch_time += time.time() - batch_start_time
             num_batches += 1
 
-    total_frames = len(rErrs)
-    assert total_frames == len(testset)
-
-    # Compute median errors.
-    tErrs.sort()
-    rErrs.sort()
-    median_idx = total_frames // 2
-    median_rErr = rErrs[median_idx]
-    median_tErr = tErrs[median_idx]
-
-    # Compute average time.
-    avg_time = avg_batch_time / num_batches
-
-    # Compute final metrics.
-    pct10_5 = pct10_5 / total_frames * 100
-    pct5 = pct5 / total_frames * 100
-    pct2 = pct2 / total_frames * 100
-    pct1 = pct1 / total_frames * 100
-
-    print_text = f"""
-===================================================
-Test complete.
-Accuracy:
-10cm/5deg: {pct10_5:.1f}, 5cm/5deg: {pct5:.1f}, 2cm/2deg: {pct2:.1f}, 1cm/1deg: {pct1:.1f}
-Median Error: {median_rErr:.1f}deg, {median_tErr:.1f}cm
-Avg. processing time: {avg_time * 1000:4.1f}ms
-"""
-    logger.info(print_text)
-
-    # Write to the test log file as well.
-    test_log.write(f"{median_rErr} {median_tErr} {avg_time}\n")
-
-    test_log.close()
+    metric.print()
     pose_log.close()
