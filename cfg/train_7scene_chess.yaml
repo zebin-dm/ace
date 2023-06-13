@@ -28,7 +28,7 @@ net_cfg:
 render_cfg:
   type: RenderConfig
   visualization: False
-  flipped_portrait: False
+  flipped_portait: False
   sparse_query: False
   mapping_vis_error_th: 10
   map_depth_filter: 10

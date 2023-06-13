@@ -80,8 +80,7 @@ class TrainerACE:
         self.ace_visualizer = None
         if render_cfg.visualization:
             # infer rendering folder from map file name
-            target_path = f"{self.exp_cfg.ouput_dir}/{render_cfg.target_path}"
-            self.ace_visualizer = ACEVisualizer(target_path=target_path,
+            self.ace_visualizer = ACEVisualizer(target_path=f"{self.exp_cfg.output_dir}/{render_cfg.target_path}",
                                                 flipped_portait=render_cfg.flipped_portait,
                                                 map_depth_filter=render_cfg.map_depth_filter,
                                                 mapping_vis_error_threshold=render_cfg.mapping_vis_error_th)
@@ -89,7 +88,7 @@ class TrainerACE:
                 self.dataset.pose_files,
                 self.dataset.rgb_files,
                 self.iterations // self.exp_cfg.visual_steps + 1,
-                render_cfg.render_camera_z_offset,
+                render_cfg.camera_z_offset,
             )
 
     @staticmethod

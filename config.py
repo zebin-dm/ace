@@ -25,7 +25,7 @@ class DSACStarConfig:
 class RenderConfig:
     visualization: bool = False  # create a video of the mapping process
     target_path: str = "renderings"  # target folder for renderings, visualizer will create a subfolder with the map name
-    flipped_portrait: bool = False  # flag for wayspots dataset where images are sideways portrait
+    flipped_portait: bool = False  # flag for wayspots dataset where images are sideways portrait
     sparse_query: bool = False  # set to true if your queries are not a smooth video
     pose_error_threshold: int = 20  # pose error threshold for the visualisation in cm/deg
     mapping_vis_error_th: int = 10  # reprojection error threshold for the visualisation in px
