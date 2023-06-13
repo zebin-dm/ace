@@ -28,16 +28,11 @@ Table of contents:
 
 ## Installation
 
-This code uses PyTorch to train and evaluate the scene-specific coordinate prediction head networks. It has been tested
-on Ubuntu 20.04 with a T4 Nvidia GPU, although it should reasonably run with other Linux distributions and GPUs as well.
-
-We provide a pre-configured [`conda`](https://docs.conda.io/en/latest/) environment containing all required dependencies
-necessary to run our code.
-You can re-create and activate the environment with:
+Start docker container and and go into it.
 
 ```shell
-conda env create -f environment.yml
-conda activate ace
+bash bash artifacts/create_container.sh
+docker exec -it zebin_ace bash
 ```
 
 **All the following commands in this file need to run in the `ace` environment.**
@@ -49,6 +44,7 @@ As such, you need to build and install the C++/Python bindings of those function
 You can do this with:
 
 ```shell
+conda install opencv==4.5.4
 cd dsacstar
 python setup.py install
 ```
@@ -137,9 +133,7 @@ The ACE scene-specific coordinate regression head for a scene can be trained usi
 Basic usage:
 
 ```shell
-./train_ace.py <scene path> <output map name>
-# Example:
-./train_ace.py datasets/7scenes_chess output/7scenes_chess.pt
+ bash scripts/train_7scenes.sh
 ```
 
 The output map file contains just the weights of the scene-specific head network -- encoded as half-precision floating
@@ -185,9 +179,7 @@ The pose estimation for a testing scene can be performed using the `test_ace.py`
 Basic usage:
 
 ```shell
-./test_ace.py <scene path> <output map name>
-# Example:
-./test_ace.py datasets/7scenes_chess output/7scenes_chess.pt
+bash scripts/test_7scenes.sh
 ```
 
 The script loads (a) the scene-specific ACE head network and (b) the pre-trained scene-agnostic encoder and, for each
