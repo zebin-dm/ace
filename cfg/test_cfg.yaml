@@ -26,4 +26,4 @@ render_cfg:
 
 exp_cfg:
   type: ExperimentConfig
-  ouput_dir: ./output/test_7scenes_chess
+  output_dir: ./output/test_7scenes_chess

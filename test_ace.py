@@ -37,8 +37,7 @@ if __name__ == '__main__':
     logger.info(f"Loaded head weights from: {net_cfg.head_path}")
 
     # Create regressor.
-    network = Regressor.create_from_split_state_dict(encoder_state_dict,
-                                                     head_state_dict)
+    network = Regressor.create_from_split_state_dict(encoder_state_dict, head_state_dict)
     network = network.to(device)
     network.eval()
 
@@ -49,23 +48,21 @@ if __name__ == '__main__':
 
     # Generate video of training process
     if render_cfg.visualization:
-        ace_visualizer = ACEVisualizer(
-            target_path=f"{exp_cfg.ouput_dir}/{render_cfg.target_path}",
-            flipped_portait=render_cfg.flipped_portait,
-            map_depth_filter=render_cfg.map_depth_filter,
-            reloc_vis_error_threshold=render_cfg.pose_error_threshold)
+        ace_visualizer = ACEVisualizer(target_path=f"{exp_cfg.ouput_dir}/{render_cfg.target_path}",
+                                       flipped_portait=render_cfg.flipped_portait,
+                                       map_depth_filter=render_cfg.map_depth_filter,
+                                       reloc_vis_error_threshold=render_cfg.pose_error_threshold)
 
         # we need to pass the training set in case the visualiser has to regenerate the map point cloud
         trainset = ACE_REGISTRY.build(config.train_data_cfg)
         # Setup dataloader. Batch size 1 by default.
         trainset_loader = DataLoader(trainset, shuffle=False, num_workers=6)
 
-        ace_visualizer.setup_reloc_visualisation(
-            frame_count=len(testset),
-            data_loader=trainset_loader,
-            network=network,
-            camera_z_offset=render_cfg.camera_z_offset,
-            reloc_frame_skip=render_cfg.frame_skip)
+        ace_visualizer.setup_reloc_visualisation(frame_count=len(testset),
+                                                 data_loader=trainset_loader,
+                                                 network=network,
+                                                 camera_z_offset=render_cfg.camera_z_offset,
+                                                 reloc_frame_skip=render_cfg.frame_skip)
     else:
         ace_visualizer = None
     metric = Metric()
@@ -85,10 +82,7 @@ if __name__ == '__main__':
             scene_coordinates_B3HW = scene_coordinates_B3HW.float().cpu()
 
             # Each frame is processed independently.
-            for frame_idx, (scene_coordinates_3HW, gt_pose_44, intrinsics_33,
-                            frame_path) in enumerate(
-                                zip(scene_coordinates_B3HW, gt_pose_B44,
-                                    intrinsics_B33, filenames)):
+            for frame_idx, (scene_coordinates_3HW, gt_pose_44, intrinsics_33, frame_path) in enumerate(zip(scene_coordinates_B3HW, gt_pose_B44, intrinsics_B33, filenames)):
 
                 # Extract focal length and principal point from the intrinsics matrix.
                 focal_length = intrinsics_33[0, 0].item()
@@ -118,8 +112,7 @@ if __name__ == '__main__':
                 )
 
                 # Calculate translation error
-                t_err = float(torch.norm(gt_pose_44[0:3, 3] -
-                                         out_pose[0:3, 3]))
+                t_err = float(torch.norm(gt_pose_44[0:3, 3] - out_pose[0:3, 3]))
 
                 # Rotation error.
                 gt_R = gt_pose_44[0:3, 0:3].numpy()
@@ -132,12 +125,11 @@ if __name__ == '__main__':
                 r_err = np.linalg.norm(r_err) * 180 / math.pi
 
                 if ace_visualizer is not None:
-                    ace_visualizer.render_reloc_frame(
-                        query_pose=gt_pose_44.numpy(),
-                        query_file=frame_path,
-                        est_pose=out_pose.numpy(),
-                        est_error=max(r_err, t_err * 100),
-                        sparse_query=render_cfg.sparse_query)
+                    ace_visualizer.render_reloc_frame(query_pose=gt_pose_44.numpy(),
+                                                      query_file=frame_path,
+                                                      est_pose=out_pose.numpy(),
+                                                      est_error=max(r_err, t_err * 100),
+                                                      sparse_query=render_cfg.sparse_query)
 
                 metric.update(t_err, r_err)
                 # Write estimated pose to pose file (inverse).
@@ -156,11 +148,10 @@ if __name__ == '__main__':
                 q_xyz = math.sin(angle * 0.5) * axis
 
                 # Write to output file. All in a single line.
-                pose_log.write(
-                    f"{frame_name} "
-                    f"{q_w} {q_xyz[0].item()} {q_xyz[1].item()} {q_xyz[2].item()} "
-                    f"{t[0]} {t[1]} {t[2]} "
-                    f"{r_err} {t_err} {inlier_count}\n")
+                pose_log.write(f"{frame_name} "
+                               f"{q_w} {q_xyz[0].item()} {q_xyz[1].item()} {q_xyz[2].item()} "
+                               f"{t[0]} {t[1]} {t[2]} "
+                               f"{r_err} {t_err} {inlier_count}\n")
 
     metric.print()
     pose_log.close()

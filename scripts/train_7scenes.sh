@@ -28,6 +28,8 @@ scene="7scenes_chess"
 datasets_folder="/mnt/nas/share-all/caizebin/03.dataset/ace/7scenes_ace"
 out_dir="./output/7Scenes"
 CUDA_VISIBLE_DEVICES=0 \
-  python train_ace.py "$datasets_folder/$scene" "$out_dir/$scene.pt" -c "./cfg/train_7scene_chess.yaml"
+  python train_ace.py -c "./cfg/train_7scene_chess.yaml"
+# CUDA_VISIBLE_DEVICES=0 \
+#   python train_ace.py "$datasets_folder/$scene" "$out_dir/$scene.pt" -c "./cfg/train_7scene_chess.yaml"
 # python test_ace.py "$datasets_folder/$scene" "$out_dir/$scene.pt" 2>&1 | tee "$out_dir/log_${scene}.txt"
 # echo "${scene}: $(cat "${out_dir}/log_${scene}.txt" | tail -5 | head -1)"

@@ -36,13 +36,14 @@ render_cfg:
 
 exp_cfg:
   type: ExperimentConfig
-  ouput_dir: ./output/train_7scenes_chess
+  output_dir: ./output/train_7scenes_chess
   learning_rate: 0.0005
   epochs: 16
   batch_size: 5120
 
   # For ACE
   training_buffer_size: 8000000
+  samples_per_image: 1024
   visual_steps: 100
 
 reproject_loss:

@@ -36,15 +36,20 @@ class RenderConfig:
 
 @dataclass
 class ExperimentConfig:
-    ouput_dir: str = None
+    output_dir: str = None
     seed: int = 2089
     learning_rate: float = None
     epochs: int = None
     batch_size: int = None
-    visual_steps: int = None  # print loss every n iterations, and (optionally) write a visualisation frame
 
     # For ACE
     training_buffer_size: int = None  # number of patches in the training buffer
+    samples_per_image: int = 1024
+    visual_steps: int = None  # print loss every n iterations, and (optionally) write a visualisation frame
+    depth_min: float = 0.1
+    depth_max: float = 1000.0
+    depth_target: float = 10.0  # default depth to regularize training
+    repro_loss_hard_clamp: float = 1000.0  # hard clamping threshold for the reprojection losses
 
     def __post_init__(self):
-        os.makedirs(self.ouput_dir, exist_ok=True)
+        os.makedirs(self.output_dir, exist_ok=True)
