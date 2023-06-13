@@ -24,6 +24,7 @@ dsac_cfg:
 
 render_cfg:
   type: RenderConfig
+  visualization: True
 
 exp_cfg:
   type: ExperimentConfig
