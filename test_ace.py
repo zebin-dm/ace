@@ -42,13 +42,13 @@ if __name__ == '__main__':
     network.eval()
 
     # This will contain each frame's pose (stored as quaternion + translation) and errors.
-    pose_log_file = f'{exp_cfg.ouput_dir}/eval_poses.txt'
+    pose_log_file = f'{exp_cfg.output_dir}/eval_poses.txt'
     logger.info(f"Saving per-frame poses and errors to: {pose_log_file}")
     pose_log = open(pose_log_file, 'w', 1)
 
     # Generate video of training process
     if render_cfg.visualization:
-        ace_visualizer = ACEVisualizer(target_path=f"{exp_cfg.ouput_dir}/{render_cfg.target_path}",
+        ace_visualizer = ACEVisualizer(target_path=f"{exp_cfg.output_dir}/{render_cfg.target_path}",
                                        flipped_portait=render_cfg.flipped_portait,
                                        map_depth_filter=render_cfg.map_depth_filter,
                                        reloc_vis_error_threshold=render_cfg.pose_error_threshold)
