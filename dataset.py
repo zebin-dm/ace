@@ -3,6 +3,7 @@ import logging
 import math
 import random
 from pathlib import Path
+from loguru import logger
 
 import cv2
 import numpy as np
@@ -207,6 +208,9 @@ class CamLocDataset(Dataset):
 
         # Calculate mean camera center (using the valid frames only).
         self.mean_cam_center = self._compute_mean_camera_center()
+        logger.info(
+            f"Load scene: {self.get_scene()} - {self.__len__()}, Mean: {self.mean_cam_center}"
+        )
 
     @staticmethod
     def _create_prediction_grid():

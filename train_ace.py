@@ -183,45 +183,6 @@ if __name__ == '__main__':
         'train on images part of this cluster. required only if --num_clusters is set.'
     )
 
-    # Params for the visualization. If enabled, it will slow down training considerably. But you get a nice video :)
-    parser.add_argument('--render_visualization',
-                        type=_strtobool,
-                        default=False,
-                        help='create a video of the mapping process')
-
-    parser.add_argument(
-        '--render_target_path',
-        type=Path,
-        default='renderings',
-        help=
-        'target folder for renderings, visualizer will create a subfolder with the map name'
-    )
-
-    parser.add_argument(
-        '--render_flipped_portrait',
-        type=_strtobool,
-        default=False,
-        help='flag for wayspots dataset where images are sideways portrait')
-
-    parser.add_argument(
-        '--render_map_error_threshold',
-        type=int,
-        default=10,
-        help='reprojection error threshold for the visualisation in px')
-
-    parser.add_argument(
-        '--render_map_depth_filter',
-        type=int,
-        default=10,
-        help='to clean up the ACE point cloud remove points too far away')
-
-    parser.add_argument(
-        '--render_camera_z_offset',
-        type=int,
-        default=4,
-        help=
-        'zoom out of the scene by moving render camera backwards, in meters')
-
     options = parser.parse_args()
     config = read_yaml_cfg(options.config_file)
     trainer = TrainerACE(options, config)

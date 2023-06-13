@@ -1,6 +1,3 @@
-# Copyright © Niantic, Inc. 2022.
-
-import logging
 import random
 import time
 
@@ -8,215 +5,137 @@ import numpy as np
 import torch
 import torch.optim as optim
 import torchvision.transforms.functional as TF
+from loguru import logger
 from torch.cuda.amp import GradScaler, autocast
 from torch.utils.data import DataLoader
 from torch.utils.data import sampler
 
-from ace_util import get_pixel_grid, to_homogeneous
+from utils.ace_util import get_pixel_grid, to_homogeneous
 from ace_loss import ReproLoss
 from ace_network import Regressor
 from dataset import CamLocDataset
 
 import ace_vis_util as vutil
 from ace_visualizer import ACEVisualizer
-
-_logger = logging.getLogger(__name__)
-
-
-def set_seed(seed):
-    """
-    Seed all sources of randomness.
-    """
-    torch.manual_seed(seed)
-    np.random.seed(seed)
-    random.seed(seed)
+from utils.utils import set_seed
+from registry import ACE_REGISTRY
 
 
 class TrainerACE:
 
     def __init__(self, options, config):
         self.config = config
+        self.exp_cfg = ACE_REGISTRY.build(self.config.exp_cfg)
+        self.use_half = self.config.train_data_cfg.use_half
+        self.render_cfg = ACE_REGISTRY.build(config.render_cfg)
         self.options = options
 
         self.device = torch.device('cuda')
-
-        # The flag below controls whether to allow TF32 on matmul. This flag defaults to True.
-        # torch.backends.cuda.matmul.allow_tf32 = False
-
-        # The flag below controls whether to allow TF32 on cuDNN. This flag defaults to True.
-        # torch.backends.cudnn.allow_tf32 = False
-
+        self.workers_number = 12
         # Setup randomness for reproducibility.
-        self.base_seed = 2089
-        set_seed(self.base_seed)
-
+        seed = self.exp_cfg.seed
+        set_seed(seed)
         # Used to generate batch indices.
-        self.batch_generator = torch.Generator()
-        self.batch_generator.manual_seed(self.base_seed + 1023)
-
+        self.batch_generator = self.create_generator(seed + 1023)
         # Dataloader generator, used to seed individual workers by the dataloader.
-        self.loader_generator = torch.Generator()
-        self.loader_generator.manual_seed(self.base_seed + 511)
-
+        self.loader_generator = self.create_generator(seed + 511)
         # Generator used to sample random features (runs on the GPU).
-        self.sampling_generator = torch.Generator(device=self.device)
-        self.sampling_generator.manual_seed(self.base_seed + 4095)
-
+        self.sampling_generator = self.create_generator(seed + 4095,
+                                                        device=self.device)
         # Generator used to permute the feature indices during each training epoch.
-        self.training_generator = torch.Generator()
-        self.training_generator.manual_seed(self.base_seed + 8191)
+        self.training_generator = self.create_generator(seed + 8191)
 
         self.iteration = 0
-        self.training_start = None
         self.num_data_loader_workers = 12
-
-        # Create dataset.
-        self.dataset = CamLocDataset(
-            root_dir=self.options.scene / "train",
-            mode=0,  # Default for ACE, we don't need scene coordinates/RGB-D.
-            use_half=self.options.use_half,
-            image_height=self.options.image_resolution,
-            augment=self.options.use_aug,
-            aug_rotation=self.options.aug_rotation,
-            aug_scale_max=self.options.aug_scale,
-            aug_scale_min=1 / self.options.aug_scale,
-            num_clusters=self.options.
-            num_clusters,  # Optional clustering for Cambridge experiments.
-            cluster_idx=self.options.
-            cluster_idx,  # Optional clustering for Cambridge experiments.
-        )
-
-        _logger.info(
-            "Loaded training scan from: {} -- {} images, mean: {:.2f} {:.2f} {:.2f}"
-            .format(self.options.scene, len(self.dataset),
-                    self.dataset.mean_cam_center[0],
-                    self.dataset.mean_cam_center[1],
-                    self.dataset.mean_cam_center[2]))
+        self.dataset = ACE_REGISTRY.build(self.config.train_data_cfg)
 
         # Create network using the state dict of the pretrained encoder.
-        encoder_state_dict = torch.load(self.options.encoder_path,
+        net_cfg = self.config.net_cfg
+        logger.info(f"Loading encoder from: {net_cfg.encoder_path}")
+        encoder_state_dict = torch.load(net_cfg.encoder_path,
                                         map_location="cpu")
         self.regressor = Regressor.create_from_encoder(
             encoder_state_dict,
             mean=self.dataset.mean_cam_center,
-            num_head_blocks=self.options.num_head_blocks,
-            use_homogeneous=self.options.use_homogeneous)
-        _logger.info(
-            f"Loaded pretrained encoder from: {self.options.encoder_path}")
-
+            num_head_blocks=net_cfg.num_head_blocks,
+            use_homogeneous=net_cfg.use_homogeneous)
         self.regressor = self.regressor.to(self.device)
         self.regressor.train()
 
         # Setup optimization parameters.
         self.optimizer = optim.AdamW(self.regressor.parameters(),
-                                     lr=self.options.learning_rate_min)
+                                     lr=self.exp_cfg.learning_rate)
 
         # Setup learning rate scheduler.
-        steps_per_epoch = self.options.training_buffer_size // self.options.batch_size
+        steps_per_epoch = self.exp_cfg.training_buffer_size // self.exp_cfg.batch_size
         self.scheduler = optim.lr_scheduler.OneCycleLR(
             self.optimizer,
-            max_lr=self.options.learning_rate_max,
-            epochs=self.options.epochs,
+            max_lr=self.config.scheduler.max_lr,
+            epochs=self.exp_cfg.epochs,
             steps_per_epoch=steps_per_epoch,
-            cycle_momentum=False)
+            cycle_momentum=self.config.scheduler.cycle_momentum)
 
         # Gradient scaler in case we train with half precision.
-        self.scaler = GradScaler(enabled=self.options.use_half)
+        self.scaler = GradScaler(enabled=self.use_half)
 
         # Generate grid of target reprojection pixel positions.
         pixel_grid_2HW = get_pixel_grid(self.regressor.OUTPUT_SUBSAMPLE)
         self.pixel_grid_2HW = pixel_grid_2HW.to(self.device)
 
-        # Compute total number of iterations.
-        self.iterations = self.options.epochs * self.options.training_buffer_size // self.options.batch_size
-        self.iterations_output = 100  # print loss every n iterations, and (optionally) write a visualisation frame
+        # total number of iterations.
+        self.iterations = self.exp_cfg.epochs * self.exp_cfg.training_buffer_size // self.exp_cfg.batch_size
 
-        # Setup reprojection loss function.
-        self.repro_loss = ReproLoss(
-            total_iterations=self.iterations,
-            soft_clamp=self.options.repro_loss_soft_clamp,
-            soft_clamp_min=self.options.repro_loss_soft_clamp_min,
-            type=self.options.repro_loss_type,
-            circle_schedule=(self.options.repro_loss_schedule == 'circle'))
+        # reprojection loss function.
+        self.config.reproject_loss.total_iterations = self.iterations
+        self.repro_loss = ACE_REGISTRY.build(self.config.reproject_loss)
 
         # Will be filled at the beginning of the training process.
         self.training_buffer = None
 
         # Generate video of training process
-        if self.options.render_visualization:
+        render_cfg = self.render_cfg
+        self.ace_visualizer = None
+        if render_cfg.visualization:
             # infer rendering folder from map file name
-            target_path = vutil.get_rendering_target_path(
-                self.options.render_target_path, self.options.output_map_file)
+            target_path = f"{self.exp_cfg.ouput_dir}/{render_cfg.target_path}"
             self.ace_visualizer = ACEVisualizer(
-                target_path,
-                self.options.render_flipped_portrait,
-                self.options.render_map_depth_filter,
-                mapping_vis_error_threshold=self.options.
-                render_map_error_threshold)
-        else:
-            self.ace_visualizer = None
+                target_path=target_path,
+                flipped_portait=render_cfg.flipped_portait,
+                map_depth_filter=render_cfg.map_depth_filter,
+                mapping_vis_error_threshold=render_cfg.mapping_vis_error_th)
+            self.ace_visualizer.setup_mapping_visualisation(
+                self.dataset.pose_files, self.dataset.rgb_files,
+                self.iterations // self.exp_cfg.visual_steps + 1,
+                render_cfg.render_camera_z_offset)
+
+    @staticmethod
+    def create_generator(seed: int, device: torch.device = None):
+        generator = torch.Generator(device=device)
+        generator.manual_seed(seed)
+        return generator
 
     def train(self):
         """
         Main training method.
-
         Fills a feature buffer using the pretrained encoder and subsequently trains a scene coordinate regression head.
         """
 
-        if self.ace_visualizer is not None:
-
-            # Setup the ACE render pipeline.
-            self.ace_visualizer.setup_mapping_visualisation(
-                self.dataset.pose_files, self.dataset.rgb_files,
-                self.iterations // self.iterations_output + 1,
-                self.options.render_camera_z_offset)
-
-        creating_buffer_time = 0.
-        training_time = 0.
-
-        self.training_start = time.time()
-
         # Create training buffer.
-        buffer_start_time = time.time()
         self.create_training_buffer()
-        buffer_end_time = time.time()
-        creating_buffer_time += buffer_end_time - buffer_start_time
-        _logger.info(
-            f"Filled training buffer in {buffer_end_time - buffer_start_time:.1f}s."
-        )
-
         # Train the regression head.
         for self.epoch in range(self.options.epochs):
-            epoch_start_time = time.time()
             self.run_epoch()
-            training_time += time.time() - epoch_start_time
 
         # Save trained model.
         self.save_model()
 
-        end_time = time.time()
-        _logger.info(
-            f'Done without errors. '
-            f'Creating buffer time: {creating_buffer_time:.1f} seconds. '
-            f'Training time: {training_time:.1f} seconds. '
-            f'Total time: {end_time - self.training_start:.1f} seconds.')
+        logger.info('Done without errors. ')
 
         if self.ace_visualizer is not None:
-
             # Finalize the rendering by animating the fully trained map.
-            vis_dataset = CamLocDataset(
-                root_dir=self.options.scene / "train",
-                mode=0,
-                use_half=self.options.use_half,
-                image_height=self.options.image_resolution,
-                augment=False)  # No data augmentation when visualizing the map
-
+            vis_dataset = ACE_REGISTRY.build(self.config.vis_data_cfg)
             vis_dataset_loader = torch.utils.data.DataLoader(
-                vis_dataset,
-                shuffle=
-                False,  # Process data in order for a growing effect later when rendering
-                num_workers=self.num_data_loader_workers)
-
+                vis_dataset, shuffle=False, num_workers=self.workers_number)
             self.ace_visualizer.finalize_mapping(self.regressor,
                                                  vis_dataset_loader)
 
@@ -252,7 +171,7 @@ class TrainerACE:
             timeout=60 if self.num_data_loader_workers > 0 else 0,
         )
 
-        _logger.info("Starting creation of the training buffer.")
+        logger.info("Starting creation of the training buffer.")
 
         # Create a training buffer that lives on the GPU.
         self.training_buffer = {
@@ -390,7 +309,7 @@ class TrainerACE:
         ])
         buffer_memory /= 1024 * 1024 * 1024
 
-        _logger.info(
+        logger.info(
             f"Created buffer of {buffer_memory:.2f}GB with {dataset_passes} passes over the training data."
         )
         self.regressor.train()
@@ -524,16 +443,14 @@ class TrainerACE:
         self.scaler.step(self.optimizer)
         self.scaler.update()
 
-        if self.iteration % self.iterations_output == 0:
+        if self.iteration % self.exp_cfg.visual_steps == 0:
             # Print status.
-            time_since_start = time.time() - self.training_start
             fraction_valid = float(valid_mask_b1.sum() / batch_size)
             # median_depth = float(pred_cam_coords_b31[:, 2].median())
 
-            _logger.info(
+            logger.info(
                 f'Iteration: {self.iteration:6d} / Epoch {self.epoch:03d}|{self.options.epochs:03d}, '
-                f'Loss: {loss:.1f}, Valid: {fraction_valid * 100:.1f}%, Time: {time_since_start:.2f}s'
-            )
+                f'Loss: {loss:.1f}, Valid: {fraction_valid * 100:.1f}%,')
 
             if self.ace_visualizer is not None:
                 vis_scene_coords = pred_scene_coords_b31.detach().cpu(
@@ -557,5 +474,5 @@ class TrainerACE:
         for k, v in head_state_dict.items():
             head_state_dict[k] = head_state_dict[k].half()
         torch.save(head_state_dict, self.options.output_map_file)
-        _logger.info(
+        logger.info(
             f"Saved trained head weights to: {self.options.output_map_file}")

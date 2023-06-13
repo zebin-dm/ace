@@ -137,7 +137,7 @@ if __name__ == '__main__':
                         query_file=frame_path,
                         est_pose=out_pose.numpy(),
                         est_error=max(r_err, t_err * 100),
-                        sparse_query=render_cfg.sparse_queries)
+                        sparse_query=render_cfg.sparse_query)
 
                 metric.update(t_err, r_err)
                 # Write estimated pose to pose file (inverse).
