@@ -11,7 +11,7 @@ import torch
 from torch.cuda.amp import autocast
 from skimage import io, color
 from skimage.transform import resize
-from ace_util import get_pixel_grid, to_homogeneous
+from utils.ace_util import get_pixel_grid, to_homogeneous
 from bisect import insort
 
 logging.getLogger('trimesh').setLevel(level=logging.WARNING)
