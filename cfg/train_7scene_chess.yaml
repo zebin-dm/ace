@@ -14,7 +14,7 @@ train_data_cfg:
   mode: 0
   use_half: True
   image_height: 480
-  augment: False
+  augment: True
   aug_rotation: 15
   aug_scale_max: 1.5
   aug_scale_min: 0.667
@@ -53,7 +53,7 @@ reproject_loss:
   total_iterations: -1  # update in code
   soft_clamp: 50
   soft_clamp_min: 1
-  loss_type: tanh
+  loss_type: dyntanh
   circle_schedule: True
 
 scheduler:
