@@ -157,7 +157,7 @@ class TrainerACE:
             dataset_passes = 0
             while buffer_idx < buffer_size:
                 dataset_passes += 1
-                for image, image_mask, _, gt_pose_inv, intrinsics, intrinsics_inv, _, _ in trainloader:
+                for sample_idx, (image, image_mask, _, gt_pose_inv, intrinsics, intrinsics_inv, _, _) in enumerate(trainloader):
                     image = image.to(self.device, non_blocking=True)  # Bx1xHxW
                     image_mask = image_mask.to(self.device, non_blocking=True)  # Bx1xHxW
                     gt_pose_inv = gt_pose_inv.to(self.device, non_blocking=True)  # Bx4x4
@@ -220,6 +220,7 @@ class TrainerACE:
 
                     buffer_idx = buffer_offset
                     if buffer_idx >= buffer_size:
+                        logger.info(f"dataset_passes: {dataset_passes}, sample_idx: {sample_idx}")
                         break
 
     def run_epoch(self, epoch):
@@ -248,6 +249,8 @@ class TrainerACE:
                 epoch=epoch,
             )
             self.iteration += 1
+            # if self.iteration > 10:
+            #     break
 
     def training_step(self, features_bC, target_px_b2, gt_inv_poses_b34, Ks_b33, invKs_b33, epoch):
         """
@@ -303,6 +306,7 @@ class TrainerACE:
         loss_invalid = torch.abs(target_camera_coords_b31 - pred_cam_coords_b31).masked_select(invalid_mask_b11).sum()
 
         # Final loss is the sum of all 2.
+        # logger.info(f"loss_valid: {loss_valid}, loss_invalid: {loss_invalid}")
         loss = loss_valid + loss_invalid
         loss /= batch_size
 
