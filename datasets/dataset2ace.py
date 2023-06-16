@@ -7,7 +7,9 @@ import numpy as np
 from typing import List
 from loguru import logger
 from pose_transform import Transform
+
 from utils.visualize import visualize_ep
+import thirdparty.colmap.read_write_model as read_write_model
 
 
 def str_to_float_list(data: str) -> List:
@@ -40,10 +42,10 @@ def pose_txt_to_transfrom(txt_file: str, return_intrinsic=False):
         return transform, intrinsic
 
 
-class DataSetVlp2Ace():
+class DataSet2Ace():
     DEFAULT_CONFIG = {
-        "src_path": "/mnt/nas/share-all/caizebin/03.dataset/ace/minimum/origin/20220318T160216+0800_xvnxa_xvnxa002_JMWtest",
-        "dst_path": "/mnt/nas/share-all/caizebin/03.dataset/ace/minimum/dst_path/minimum/train"
+        "src_path": None,
+        "dst_path": None,
     }
 
     def __init__(self, config=None) -> None:
@@ -63,7 +65,7 @@ class DataSetVlp2Ace():
         fx, fy, cx, cy = intrinsic.tolist()
         return np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1]])
 
-    def generate(self):
+    def generate_vlp2ace(self):
         imfs = glob.glob(f"{self.src_path}/*.jpg")
         logger.info(f"the file number is: {len(imfs)}")
         rgb_path = f"{self.dst_path}/rgb"
@@ -84,6 +86,35 @@ class DataSetVlp2Ace():
             pose = transform.inverse().matrix  # convert camera2world to world2camera
             intrinsic = self.gen_intrinsic_matrix(intrinsic)
             np.savetxt(save_posef, pose)
+            np.savetxt(save_calif, intrinsic)
+
+    def generate_colmap2ace(self):
+        sparse_path = f"{self.src_path}/sparse"
+        images_path = f"{self.src_path}/images"
+        images_bin_file = f"{sparse_path}/images.bin"
+        cameras_bin_file = f"{sparse_path}/cameras.bin"
+        # imfs = glob.glob(f"{images_path}/*.jpg")
+        images = read_write_model.read_images_binary(images_bin_file)
+        cameras = read_write_model.read_cameras_binary(cameras_bin_file)
+        logger.info(f"the file number is: {len(images)}")
+        rgb_path = f"{self.dst_path}/rgb"
+        poses_path = f"{self.dst_path}/poses"
+        calibration = f"{self.dst_path}/calibration"
+        os.makedirs(rgb_path, exist_ok=True)
+        os.makedirs(poses_path, exist_ok=True)
+        os.makedirs(calibration, exist_ok=True)
+        for idx, (image_id, image) in enumerate(images.items()):
+            file_name = os.path.splitext(os.path.basename(image.name))[0]
+            src_imf = f"{images_path}/{image.name}"
+            save_imf = f"{rgb_path}/{file_name}.color.png"
+            shutil.copy(src_imf, save_imf)
+
+            transform = Transform(quat=image.qvec, pos=image.tvec)
+            save_posef = f"{poses_path}/{file_name}.pose.txt"
+            np.savetxt(save_posef, transform.matrix)
+
+            intrinsic = self.gen_intrinsic_matrix(cameras[image.camera_id].params)
+            save_calif = f"{calibration}/{file_name}.calibration.txt"
             np.savetxt(save_calif, intrinsic)
 
 
@@ -111,55 +142,10 @@ class ACEVisualize():
         intrinsics[1, 2] = h / 2
         return intrinsics.numpy()
 
-    def visualize(self):
-        name1 = "seq-05-frame-000998"
-        name2 = "seq-05-frame-000999"
-        rgb_path = "/mnt/nas/share-all/caizebin/03.dataset/ace/7scenes_ace/7scenes_chess/test/rgb"
-        poses_path = "/mnt/nas/share-all/caizebin/03.dataset/ace/7scenes_ace/7scenes_chess/test/poses"
-        calibration_path = "/mnt/nas/share-all/caizebin/03.dataset/ace/7scenes_ace/7scenes_chess/test/calibration"
-        imf1 = f"{rgb_path}/{name1}.color.png"
-        imf2 = f"{rgb_path}/{name2}.color.png"
-        posef1 = f"{poses_path}/{name1}.pose.txt"
-        posef2 = f"{poses_path}/{name2}.pose.txt"
-        calif1 = f"{calibration_path}/{name1}.calibration.txt"
-        calif2 = f"{calibration_path}/{name2}.calibration.txt"
-
-        pose1 = self.load_pose(posef1)
-        pose2 = self.load_pose(posef2)
-
-        intrinsic1 = self.load_intrinsic(calif1, imf1)
-        intrinsic2 = self.load_intrinsic(calif2, imf2)
-
-        visualize_ep(imf1, imf2, pose1, pose2, intrinsic1, intrinsic2)
-
-    def visualize_vlp(self):
-        name1 = "BASE@20220318T160216+0800_xvnxa_xvnxa002_JMWtest@16dd6afceb8925f1@camera_left@3403b6cfe30f6f85"
-        name2 = "BASE@20220318T160216+0800_xvnxa_xvnxa002_JMWtest@16dd6afcd3aa714a@camera_left@3403b6cfe30f7889"
-        rgb_path = "/mnt/nas/share-all/caizebin/03.dataset/ace/minimum/dst_path/minimum/train/rgb"
-        poses_path = "/mnt/nas/share-all/caizebin/03.dataset/ace/minimum/dst_path/minimum/train/poses"
-        calibration_path = "/mnt/nas/share-all/caizebin/03.dataset/ace/minimum/dst_path/minimum/train/calibration"
-        imf1 = f"{rgb_path}/{name1}.color.png"
-        imf2 = f"{rgb_path}/{name2}.color.png"
-        posef1 = f"{poses_path}/{name1}.pose.txt"
-        posef2 = f"{poses_path}/{name2}.pose.txt"
-        calif1 = f"{calibration_path}/{name1}.calibration.txt"
-        calif2 = f"{calibration_path}/{name2}.calibration.txt"
-
-        pose1 = self.load_pose(posef1)
-        pose2 = self.load_pose(posef2)
-
-        intrinsic1 = self.load_pose(calif1)
-        intrinsic2 = self.load_pose(calif2)
-
-        visualize_ep(imf1, imf2, pose1, pose2, intrinsic1, intrinsic2)
-
-    def visualize_colmap(self):
-        base_path = "/mnt/nas/share-all/caizebin/03.dataset/ace/minimum/dst_path/temple_nara_japan/train"
-        name1 = "99929260_2648147496"
-        name2 = "99949238_8936938996"
-        rgb_path = f"{base_path}/rgb"
-        poses_path = f"{base_path}/poses"
-        calibration_path = f"{base_path}/calibration"
+    def visualize(self, datapath, name1, name2):
+        rgb_path = f"{datapath}/rgb"
+        poses_path = f"{datapath}/poses"
+        calibration_path = f"{datapath}/calibration"
         imf1 = f"{rgb_path}/{name1}.color.png"
         imf2 = f"{rgb_path}/{name2}.color.png"
         posef1 = f"{poses_path}/{name1}.pose.txt"
@@ -179,22 +165,40 @@ class ACEVisualize():
 def test_vlp2ace():
     config = {
         "src_path": "/mnt/nas/share-all/caizebin/03.dataset/ace/minimum/origin/20220719T161313+0800_xvnxa_xvnxa001_mini_test",
-        "dst_path": "/mnt/nas/share-all/caizebin/03.dataset/ace/minimum/dst_path/minimum/test"
+        "dst_path": "/mnt/nas/share-all/caizebin/03.dataset/ace/minimum/dst_path/minimum_test"
     }
-    data_ins = DataSetVlp2Ace(config=config)
-    data_ins.generate()
+    data_ins = DataSet2Ace(config=config)
+    data_ins.generate_vlp2ace()
+
+
+def test_colmap2ace():
+    config = {
+        "src_path": "/mnt/nas/share-map/common/public_dataset/image_match/temple_nara_japan/dense",
+        "dst_path": "/mnt/nas/share-all/caizebin/03.dataset/ace/minimum/dst_path/temple_nara_japan_test"
+    }
+    generator = DataSet2Ace(config)
+    generator.generate_colmap2ace()
 
 
 def test_ace_visulize():
+    datapath = "/mnt/nas/share-all/caizebin/03.dataset/ace/7scenes_ace/7scenes_chess/test"
+    name1 = "seq-05-frame-000998"
+    name2 = "seq-05-frame-000999"
     visualize = ACEVisualize()
-    visualize.visualize()
+    visualize.visualize(datapath, name1, name2)
 
 
 def test_ace_visulize_vlp():
+    datapath = "/mnt/nas/share-all/caizebin/03.dataset/ace/minimum/dst_path/minimum/train"
+    name1 = "BASE@20220318T160216+0800_xvnxa_xvnxa002_JMWtest@16dd6afceb8925f1@camera_left@3403b6cfe30f6f85"
+    name2 = "BASE@20220318T160216+0800_xvnxa_xvnxa002_JMWtest@16dd6afcd3aa714a@camera_left@3403b6cfe30f7889"
     visualize = ACEVisualize()
-    visualize.visualize_vlp()
+    visualize.visualize(datapath, name1, name2)
 
 
 def test_ace_visulize_colmap():
+    datapath = "/mnt/nas/share-all/caizebin/03.dataset/ace/minimum/dst_path/temple_nara_japan/train"
+    name1 = "99929260_2648147496"
+    name2 = "99949238_8936938996"
     visualize = ACEVisualize()
-    visualize.visualize_colmap()
+    visualize.visualize(datapath, name1, name2)

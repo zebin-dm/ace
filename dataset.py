@@ -491,7 +491,6 @@ class CamLocDataset(Dataset):
             tensors = [self._get_single_item(i, image_height) for i in idx]
             return default_collate(tensors)
         else:
-            # Single element.
             return self._get_single_item(idx, image_height)
 
 
@@ -505,4 +504,6 @@ if __name__ == "__main__":
         for idx, val in enumerate(data):
             if isinstance(val, torch.Tensor):
                 print(f"{idx:02d}: {val.shape}")
+            else:
+                print(f"{idx:02d}: {val}")
         break

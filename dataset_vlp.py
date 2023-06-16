@@ -1,18 +1,17 @@
 import os
-import math
 import random
 import cv2
 import torch
 import numpy as np
 import torchvision.transforms.functional as TF
 
-from skimage import color
 from skimage import io
+from skimage import color
 from loguru import logger
+from torchvision import transforms
 from skimage.transform import rotate
 from torch.utils.data import Dataset
 from torch.utils.data.dataloader import default_collate
-from torchvision import transforms
 
 
 class CamLocDatasetVLP(Dataset):
@@ -301,13 +300,8 @@ class CamLocDatasetVLP(Dataset):
     def _get_single_item(self, idx, image_height):
         idx = self.valid_file_indices[idx]
         image = self._load_image(idx)  # HxWx3
-
         # Load intrinsics.
-        # focal_length = float(np.loadtxt(self.calibration_files[idx]))
-        # print(f"focal_length: {focal_length}")
-        intrinsics = self._load_calibration(idx)
-
-        # The image will be scaled to image_height, adjust focal length as well.
+        intrinsics = self._load_calibration(idx)  # 3x3
         scale_factor = image_height / image.shape[0]
         image_width = int(image.shape[1] * scale_factor)
         new_size = (image_height, image_width)
@@ -357,7 +351,6 @@ class CamLocDatasetVLP(Dataset):
             image = image.half()
         # Binarize the mask.
         image_mask = image_mask > 0
-        # Invert the pose.
         pose_inv = pose.inverse()
         intrinsics_inv = intrinsics.inverse()
         coords = 0  # Default for ACE, we don't need them.
@@ -379,7 +372,6 @@ class CamLocDatasetVLP(Dataset):
             tensors = [self._get_single_item(i, image_height) for i in idx]
             return default_collate(tensors)
         else:
-            # Single element.
             return self._get_single_item(idx, image_height)
 
 
@@ -397,12 +389,6 @@ if __name__ == "__main__":
     intrinsic = []
     image = []
     for didx, data in enumerate(dataset):
-
-        # for idx, val in enumerate(data):
-        #     if isinstance(val, torch.Tensor):
-        #         print(f"{idx:02d}: {val.shape}")
-        #     else:
-        #         print(f"{idx:02d}: {val}")
         imf.append(data[3])
         pose.append(data[1].numpy())
         intrinsic.append(data[2].numpy())
