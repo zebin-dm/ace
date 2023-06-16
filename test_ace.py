@@ -12,8 +12,8 @@ from torch.utils.data import DataLoader
 import dsacstar
 from ace_network import Regressor
 from ace_visualizer import ACEVisualizer
+from pydlutils.basic.yaml import paser_yaml_cfg
 from utils.metric import Metric
-from utils.configuration import paser_yaml_cfg
 from registry import ACE_REGISTRY
 
 if __name__ == '__main__':
