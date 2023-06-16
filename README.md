@@ -121,6 +121,13 @@ cd datasets
 ./setup_wayspots.py
 ```
 
+### Convert VLP/Colmap dataset to ACE dataset
+```shell
+bash datasets/dataset2ace.sh
+# visualize the pose and intrinsics is right or not.
+bash datasets/ace_ep_visulize.sh
+```
+
 ## Usage
 
 We provide scripts to train and evaluate ACE scene coordinate regression networks.

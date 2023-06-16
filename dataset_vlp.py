@@ -1,23 +1,20 @@
 import os
-import math
 import random
-from pathlib import Path
-from loguru import logger
-
 import cv2
-import numpy as np
 import torch
-import torch.nn.functional as F
+import numpy as np
 import torchvision.transforms.functional as TF
-from skimage import color
+
 from skimage import io
-from skimage.transform import rotate, resize
+from skimage import color
+from loguru import logger
+from torchvision import transforms
+from skimage.transform import rotate
 from torch.utils.data import Dataset
 from torch.utils.data.dataloader import default_collate
-from torchvision import transforms
 
 
-class CamLocDataset(Dataset):
+class CamLocDatasetVLP(Dataset):
     """Camera localization dataset.
     Access to image, calibration and ground truth data given a dataset directory.
     """
@@ -38,6 +35,7 @@ class CamLocDataset(Dataset):
         use_half=True,
         num_clusters=None,
         cluster_idx=None,
+        debug: bool = False,
     ):
         """
         Parameters:
@@ -66,9 +64,7 @@ class CamLocDataset(Dataset):
         """
         self.feat_subsample = feat_subsample  # the sampe value as ace_network.Regressor.OUTPUT_SUBSAMPLE
         self.use_half = use_half
-        self.init = (mode == 1)
         self.sparse = sparse
-        self.eye = (mode == 2)
         self.image_height = image_height
         self.augment = augment
         self.aug_rotation = aug_rotation
@@ -76,93 +72,43 @@ class CamLocDataset(Dataset):
         self.aug_scale_max = aug_scale_max
         self.aug_black_white = aug_black_white
         self.aug_color = aug_color
+        self.debug = debug
 
         self.num_clusters = num_clusters
         self.cluster_idx = cluster_idx
-
+        assert mode == 0, "only support model=0"
         if self.num_clusters is not None:
             assert self.num_clusters > 0, "num_clusters must be at least 1"
             assert self.cluster_idx is not None, "cluster_idx needs to be specified when num_clusters is set"
             if self.cluster_idx < 0 or self.cluster_idx >= self.num_clusters:
                 raise ValueError(f"cluster_idx needs to be between 0 and {self.num_clusters - 1}")
 
-        if self.eye and self.augment and (self.aug_rotation > 0 or self.aug_scale_min != 1 or self.aug_scale_max != 1):
-            # pre-generated eye coordinates cannot be augmented
-            logger.warning("Check your augmentation settings. Camera coordinates will not be augmented.")
-
-        # Setup data paths.
-        root_dir = Path(root_dir)
         self.root_dir = root_dir
-
-        # Main folders.
-        rgb_dir = root_dir / 'rgb'
-        pose_dir = root_dir / 'poses'
-        calibration_dir = root_dir / 'calibration'
-
-        # Optional folders. Unused in ACE.
-        if self.eye:
-            coord_dir = root_dir / 'eye'
-        elif self.sparse:
-            coord_dir = root_dir / 'init'
-        else:
-            coord_dir = root_dir / 'depth'
-
-        # Find all images. The assumption is that it only contains image files.
-        self.rgb_files = sorted(rgb_dir.iterdir())
-
-        # Find all ground truth pose files. One per image.
-        self.pose_files = sorted(pose_dir.iterdir())
-
-        # Load camera calibrations. One focal length per image.
-        self.calibration_files = sorted(calibration_dir.iterdir())
-
-        if self.init or self.eye:
-            # Load GT scene coordinates.
-            self.coord_files = sorted(coord_dir.iterdir())
-        else:
-            self.coord_files = None
-
-        if len(self.rgb_files) != len(self.pose_files):
-            raise RuntimeError('RGB file count does not match pose file count!')
-
-        if len(self.rgb_files) != len(self.calibration_files):
-            raise RuntimeError('RGB file count does not match calibration file count!')
-
-        if self.coord_files and len(self.rgb_files) != len(self.coord_files):
-            raise RuntimeError('RGB file count does not match coordinate file count!')
-
-        # Create grid of 2D pixel positions used when generating scene coordinates from depth.
-        if self.init and not self.sparse:
-            self.prediction_grid = self._create_prediction_grid()
-        else:
-            self.prediction_grid = None
+        self.rgb_dir = f"{root_dir}/rgb"
+        self.pose_dir = f"{root_dir}/poses"
+        self.calibration_dir = f"{root_dir}/calibration"
+        self.file_names = self.get_names(self.pose_dir)
 
         # Image transformations. Excluding scale since that can vary batch-by-batch.
+        # statistics calculated over 7scenes training set, should generalize fairly well
+        mean = [0.4]
+        std = [0.25]
         if self.augment:
             self.image_transform = transforms.Compose([
-                # transforms.ToPILImage(),
-                # transforms.Resize(int(self.image_height * scale_factor)),
                 transforms.Grayscale(),
                 transforms.ColorJitter(brightness=self.aug_black_white, contrast=self.aug_black_white),
-                # saturation=self.aug_color, hue=self.aug_color),  # Disable colour augmentation.
                 transforms.ToTensor(),
-                transforms.Normalize(
-                    mean=[0.4],  # statistics calculated over 7scenes training set, should generalize fairly well
-                    std=[0.25]),
+                transforms.Normalize(mean=mean, std=std),
             ])
         else:
             self.image_transform = transforms.Compose([
-                # transforms.ToPILImage(),
-                # transforms.Resize(self.image_height),
                 transforms.Grayscale(),
                 transforms.ToTensor(),
-                transforms.Normalize(
-                    mean=[0.4],  # statistics calculated over 7scenes training set, should generalize fairly well
-                    std=[0.25]),
+                transforms.Normalize(mean=mean, std=std),
             ])
 
         # We use this to iterate over all frames. If clustering is enabled this is used to filter them.
-        self.valid_file_indices = np.arange(len(self.rgb_files))
+        self.valid_file_indices = np.arange(len(self.file_names))
 
         # If clustering is enabled.
         if self.num_clusters is not None:
@@ -176,23 +122,30 @@ class CamLocDataset(Dataset):
         self.mean_cam_center = self._compute_mean_camera_center()
         logger.info(f"Load scene: {self.get_scene()} - {self.__len__()}, Mean: {self.mean_cam_center}")
 
-    def _create_prediction_grid(self):
-        # Assumes all input images have a resolution smaller than 5000x5000.
-        wh = math.ceil(5000 / self.feat_subsample)
-        prediction_grid = np.zeros((2, wh, wh))
+    def get_names(self, pose_path: str):
+        name_list = os.listdir(pose_path)
+        file_names = []
+        for name in name_list:
+            if name.endswith("pose.txt"):
+                file_names.append(name.replace(".pose.txt", ""))
+        file_names.sort()
+        logger.info(f"Loading sample: {len(file_names)}")
+        return file_names
 
-        for x in range(0, prediction_grid.shape[2]):
-            for y in range(0, prediction_grid.shape[1]):
-                prediction_grid[0, y, x] = x * self.feat_subsample
-                prediction_grid[1, y, x] = y * self.feat_subsample
+    def get_rgb(self, idx):
+        return f"{self.rgb_dir}/{self.file_names[idx]}.color.png"
 
-        return prediction_grid
+    def get_pose(self, idx):
+        return f"{self.pose_dir}/{self.file_names[idx]}.pose.txt"
+
+    def get_calibration(self, idx):
+        return f"{self.calibration_dir}/{self.file_names[idx]}.calibration.txt"
 
     @staticmethod
-    def _resize_image(image, image_height):
+    def _resize_image(image, size):
         # Resize a numpy image as PIL. Works slightly better than resizing the tensor using torch's internal function.
         image = TF.to_pil_image(image)
-        image = TF.resize(image, image_height)
+        image = TF.resize(image, size)
         return image
 
     @staticmethod
@@ -317,27 +270,28 @@ class CamLocDataset(Dataset):
 
         for idx in self.valid_file_indices:
             pose = self._load_pose(idx)
-
-            # Get the translation component.
             mean_cam_center += pose[0:3, 3]
-
-        # Avg.
         mean_cam_center /= len(self)
         return mean_cam_center
 
     def _load_image(self, idx):
-        # Return color image: HxWx3
-        image = io.imread(self.rgb_files[idx])
+        # return color image: HxWx3
+        image = io.imread(self.get_rgb(idx))
         if len(image.shape) < 3:
             image = color.gray2rgb(image)
         return image
 
     def _load_pose(self, idx):
-        # Stored as a 4x4 matrix.
-        pose = np.loadtxt(self.pose_files[idx])
+        # return 4x4 matrix.
+        pose = np.loadtxt(self.get_pose(idx))
         pose = torch.from_numpy(pose).float()
-
         return pose
+
+    def _load_calibration(self, idx):
+        # return 3x3 matrix.
+        intrinsics = np.loadtxt(self.get_calibration(idx))
+        intrinsics = torch.from_numpy(intrinsics).float()
+        return intrinsics
 
     def get_scene(self):
         name = os.path.basename(os.path.dirname(self.root_dir))
@@ -346,137 +300,64 @@ class CamLocDataset(Dataset):
     def _get_single_item(self, idx, image_height):
         idx = self.valid_file_indices[idx]
         image = self._load_image(idx)  # HxWx3
-
         # Load intrinsics.
-        focal_length = float(np.loadtxt(self.calibration_files[idx]))
+        intrinsics = self._load_calibration(idx)  # 3x3
+        scale_factor = image_height / image.shape[0]
+        image_width = int(image.shape[1] * scale_factor)
+        new_size = (image_height, image_width)
 
-        # The image will be scaled to image_height, adjust focal length as well.
-        f_scale_factor = image_height / image.shape[0]
-        focal_length *= f_scale_factor
+        if self.debug:
+            debug_image = image.copy()
+            debug_image = cv2.resize(debug_image, [image_width, image_height])
+            logger.info(f"origin imgae shape: {debug_image.shape}, {debug_image.dtype}")
 
-        # Rescale image.
-        image = self._resize_image(image, image_height)
+        image = self._resize_image(image, new_size)
+        intrinsics_scale = torch.tensor([scale_factor, scale_factor, 1.0]).to(intrinsics)
+        intrinsics_scale = torch.diag_embed(intrinsics_scale)
+        intrinsics = torch.mm(intrinsics_scale, intrinsics)
 
         # Create mask of the same size as the resized image (it's a PIL image at this point).
         image_mask = torch.ones((1, image.size[1], image.size[0]))
 
         # Apply remaining transforms.
         image = self.image_transform(image)
-
         # Load pose.
         pose = self._load_pose(idx)
 
-        # Load ground truth scene coordinates, if needed.
-        if self.init:
-            if self.sparse:
-                coords = torch.load(self.coord_files[idx])
-            else:
-                depth = io.imread(self.coord_files[idx])
-                depth = depth.astype(np.float64)
-                depth /= 1000  # from millimeters to meters
-        elif self.eye:
-            coords = torch.load(self.coord_files[idx])
-        else:
-            coords = 0  # Default for ACE, we don't need them.
-
         # Apply data augmentation if necessary.
-        if self.augment:
-            # Generate a random rotation angle.
-            angle = random.uniform(-self.aug_rotation, self.aug_rotation)
+        # if self.augment:
+        #     angle = random.uniform(-self.aug_rotation, self.aug_rotation)
+        #     if self.debug:
+        #         debug_image = debug_image / 255.0
+        #         debug_image = rotate(debug_image, angle, order=1, mode='reflect')
+        #         logger.info(f"rotate imgae shape: {debug_image.shape}, {debug_image.dtype}")
+        #         debug_image = debug_image * 255.0
+        #         debug_image = debug_image.astype(np.uint8)
 
-            # Rotate input image and mask.
-            image = self._rotate_image(image, angle, 1, 'reflect')
-            image_mask = self._rotate_image(image_mask, angle, order=1, mode='constant')
+        #     image = self._rotate_image(image, angle, 1, 'reflect')
+        #     image_mask = self._rotate_image(image_mask, angle, order=1, mode='constant')
+        #     # Rotate ground truth camera pose as well.
+        #     angle = angle * math.pi / 180.
+        #     # Create a rotation matrix.
+        #     pose_rot = torch.eye(4)
+        #     pose_rot[0, 0] = math.cos(angle)
+        #     pose_rot[0, 1] = -math.sin(angle)
+        #     pose_rot[1, 0] = math.sin(angle)
+        #     pose_rot[1, 1] = math.cos(angle)
+        #     # Apply rotation matrix to the ground truth camera pose.
+        #     pose = torch.matmul(pose, pose_rot)
 
-            # If we loaded the GT scene coordinates.
-            if self.init:
-                if self.sparse:
-                    # rotate and scale initalization targets
-                    coords_w = math.ceil(image.size(2) / self.feat_subsample)
-                    coords_h = math.ceil(image.size(1) / self.feat_subsample)
-                    coords = F.interpolate(coords.unsqueeze(0), size=(coords_h, coords_w))[0]
-
-                    coords = self._rotate_image(coords, angle, 0)
-                else:
-                    # rotate and scale depth maps
-                    depth = resize(depth, image.shape[1:], order=0)
-                    depth = rotate(depth, angle, order=0, mode='constant')
-
-            # Rotate ground truth camera pose as well.
-            angle = angle * math.pi / 180.
-            # Create a rotation matrix.
-            pose_rot = torch.eye(4)
-            pose_rot[0, 0] = math.cos(angle)
-            pose_rot[0, 1] = -math.sin(angle)
-            pose_rot[1, 0] = math.sin(angle)
-            pose_rot[1, 1] = math.cos(angle)
-
-            # Apply rotation matrix to the ground truth camera pose.
-            pose = torch.matmul(pose, pose_rot)
-
-        # Not used for ACE.
-        if self.init and not self.sparse:
-            # generate initialization targets from depth map
-            offsetX = int(self.feat_subsample / 2)
-            offsetY = int(self.feat_subsample / 2)
-
-            coords = torch.zeros((3, math.ceil(image.shape[1] / self.feat_subsample), math.ceil(image.shape[2] / self.feat_subsample)))
-
-            # subsample to network output size
-            depth = depth[offsetY::self.feat_subsample, offsetX::self.feat_subsample]
-
-            # construct x and y coordinates of camera coordinate
-            xy = self.prediction_grid[:, :depth.shape[0], :depth.shape[1]].copy()
-            # add random pixel shift
-            xy[0] += offsetX
-            xy[1] += offsetY
-            # substract principal point (assume image center)
-            xy[0] -= image.shape[2] / 2
-            xy[1] -= image.shape[1] / 2
-            # reproject
-            xy /= focal_length
-            xy[0] *= depth
-            xy[1] *= depth
-
-            # assemble camera coordinates tensor
-            eye = np.ndarray((4, depth.shape[0], depth.shape[1]))
-            eye[0:2] = xy
-            eye[2] = depth
-            eye[3] = 1
-
-            # eye to scene coordinates
-            sc = np.matmul(pose.numpy(), eye.reshape(4, -1))
-            sc = sc.reshape(4, depth.shape[0], depth.shape[1])
-
-            # mind pixels with invalid depth
-            sc[:, depth == 0] = 0
-            sc[:, depth > 1000] = 0
-            sc = torch.from_numpy(sc[0:3])
-
-            coords[:, :sc.shape[1], :sc.shape[2]] = sc
-
-        # Convert to half if needed.
-        if self.use_half and torch.cuda.is_available():
+        if self.use_half:
             image = image.half()
-
         # Binarize the mask.
         image_mask = image_mask > 0
-
-        # Invert the pose.
         pose_inv = pose.inverse()
-
-        # Create the intrinsics matrix.
-        intrinsics = torch.eye(3)
-        intrinsics[0, 0] = focal_length
-        intrinsics[1, 1] = focal_length
-        # Hardcode the principal point to the centre of the image.
-        intrinsics[0, 2] = image.shape[2] / 2
-        intrinsics[1, 2] = image.shape[1] / 2
-
-        # Also need the inverse.
         intrinsics_inv = intrinsics.inverse()
-
-        return image, image_mask, pose, pose_inv, intrinsics, intrinsics_inv, coords, str(self.rgb_files[idx])
+        coords = 0  # Default for ACE, we don't need them.
+        imf = self.get_rgb(idx)
+        if self.debug:
+            return debug_image, pose, intrinsics, imf
+        return image, image_mask, pose, pose_inv, intrinsics, intrinsics_inv, coords, imf
 
     def __len__(self):
         return len(self.valid_file_indices)
@@ -495,15 +376,26 @@ class CamLocDataset(Dataset):
 
 
 if __name__ == "__main__":
-    dataset = CamLocDataset(
-        root_dir="/mnt/nas/share-all/caizebin/03.dataset/ace/7scenes_ace/7scenes_chess/test",
+    from utils.visualize import visualize_ep
+    dataset = CamLocDatasetVLP(
+        root_dir="/mnt/nas/share-all/caizebin/03.dataset/ace/minimum/dst_path/minimum_season/train",
         feat_subsample=8,
+        image_height=1080,
+        augment=True,
+        debug=True,
     )
+    imf = []
+    pose = []
+    intrinsic = []
+    image = []
+    for didx, data in enumerate(dataset):
+        imf.append(data[3])
+        pose.append(data[1].numpy())
+        intrinsic.append(data[2].numpy())
+        image.append(data[0])
+        cv2.imwrite(f"debug_image_{didx}.jpg", data[0])
 
-    for data in dataset:
-        for idx, val in enumerate(data):
-            if isinstance(val, torch.Tensor):
-                print(f"{idx:02d}: {val.shape}")
-            else:
-                print(f"{idx:02d}: {val}")
-        break
+        if didx >= 5:
+            break
+    print(imf)
+    visualize_ep(imf[2], imf[4], pose[2], pose[4], intrinsic[2], intrinsic[4], im1=image[2], im2=image[4])

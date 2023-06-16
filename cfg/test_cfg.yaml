@@ -2,6 +2,7 @@
 test_data_cfg:
   type: CamLocDataset
   root_dir: /mnt/nas/share-all/caizebin/03.dataset/ace/7scenes_ace/7scenes_chess/test
+  feat_subsample: 8
   mode: 0 
   image_height: 480
 
@@ -9,6 +10,7 @@ test_data_cfg:
 train_data_cfg:
   type: CamLocDataset
   root_dir: /mnt/nas/share-all/caizebin/03.dataset/ace/7scenes_ace/7scenes_chess/train
+  feat_subsample: 8
   mode: 0 
   image_height: 480
 
@@ -24,6 +26,7 @@ dsac_cfg:
 
 render_cfg:
   type: RenderConfig
+  visualization: False
 
 exp_cfg:
   type: ExperimentConfig
