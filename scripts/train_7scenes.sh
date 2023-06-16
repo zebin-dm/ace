@@ -25,4 +25,4 @@
 # done
 
 CUDA_VISIBLE_DEVICES=0 \
-  python train_ace.py -c "./cfg/train_7scene_chess_v2.yaml"
+  python train_ace.py -c "./cfg/train_7scene_chess.yaml"
