@@ -38,7 +38,7 @@ render_cfg:
 
 exp_cfg:
   type: ExperimentConfig
-  output_dir: ./output/train_7scenes_chess_v2
+  output_dir: ./output/7scene_chess_train
   learning_rate: 0.0005
   epochs: 16
   batch_size: 5120

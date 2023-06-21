@@ -1,12 +1,3 @@
-# vis_data_cfg:
-#   type: CamLocDatasetVLP
-#   root_dir: /mnt/nas/share-all/caizebin/03.dataset/ace/minimum/dst_path/minimum_season/train
-#   feat_subsample: 8
-#   mode: 0 
-#   image_height: 480
-#   use_half: True
-#   augment: False
-
 train_data_cfg:
   type: CamLocDatasetVLP
   root_dir: /mnt/nas/share-all/caizebin/03.dataset/ace/dstpath/20220928T170202+0800_Capture_Xiaomi_21051182C_no2_office_table_full_2

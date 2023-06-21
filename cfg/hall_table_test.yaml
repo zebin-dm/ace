@@ -1,27 +1,16 @@
 
 test_data_cfg:
   type: CamLocDatasetVLP
-  root_dir: /mnt/nas/share-all/caizebin/03.dataset/ace/hall_gt/dst_path/20221208T164222+0800_Capture_hall_table_2
+  root_dir: /mnt/nas/share-all/caizebin/03.dataset/ace/dstpath/20221208T164222+0800_Capture_hall_table_2
   feat_subsample: 8
   mode: 0 
   image_height: 736
-  data_mean: [0.5059, 1.2456, -1.0665]
-
-
-train_data_cfg:
-  type: CamLocDatasetVLP
-  root_dir: /mnt/nas/share-all/caizebin/03.dataset/ace/hall_gt/dst_path/20221208T164151+0800_Capture_hall_table_full
-  feat_subsample: 8
-  mode: 0 
-  image_height: 736
-
+  data_mean: [-9.4845,  0.5278,  9.4705]
 
 net_cfg:
   type: NetConfig
   encoder_path: /mnt/nas/share-all/caizebin/03.dataset/ace/pretrained/ace_encoder_pretrained.pt
-  # head_path: /mnt/nas/share-all/caizebin/03.dataset/ace/pretrained/ace_models/7Scenes/7scenes_chess.pt
-  head_path: ./output/train_hall_gt/dst_path.pt
-
+  head_path: 
 dsac_cfg:
   type: DSACStarConfig
 
@@ -31,4 +20,4 @@ render_cfg:
 
 exp_cfg:
   type: ExperimentConfig
-  output_dir: ./output/test_hall_gt
+  output_dir: ./output/hall_table_test
