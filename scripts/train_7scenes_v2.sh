@@ -24,6 +24,5 @@
 #   echo "${scene}: $(cat "${out_dir}/log_${scene}.txt" | tail -5 | head -1)"
 # done
 
-export PYTHONPATH=/ace:$PYTHONPATH
 CUDA_VISIBLE_DEVICES=0 \
-  python train_ace.py -c "./cfg/train_7scene_chess.yaml"
+  python train_ace.py -c "./cfg/train_7scene_chess_v2.yaml"

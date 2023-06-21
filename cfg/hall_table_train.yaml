@@ -1,0 +1,62 @@
+# vis_data_cfg:
+#   type: CamLocDatasetVLP
+#   root_dir: /mnt/nas/share-all/caizebin/03.dataset/ace/minimum/dst_path/minimum_season/train
+#   feat_subsample: 8
+#   mode: 0 
+#   image_height: 480
+#   use_half: True
+#   augment: False
+
+train_data_cfg:
+  type: CamLocDatasetVLP
+  root_dir: /mnt/nas/share-all/caizebin/03.dataset/ace/dstpath/20221208T164151+0800_Capture_hall_table_full
+  feat_subsample: 8
+  mode: 0
+  use_half: True
+  image_height: 736
+  augment: True
+  aug_rotation: 15
+  aug_scale_max: 1.5
+  aug_scale_min: 0.667
+  num_clusters: null
+  cluster_idx: null
+
+net_cfg:
+  type: NetConfig
+  encoder_path: /mnt/nas/share-all/caizebin/03.dataset/ace/pretrained/ace_encoder_pretrained.pt
+  num_head_blocks: 1
+  use_homogeneous: True
+
+render_cfg:
+  type: RenderConfig
+  visualization: False
+  flipped_portait: False
+  sparse_query: False
+  mapping_vis_error_th: 10
+  map_depth_filter: 10
+  camera_z_offset: 4
+
+exp_cfg:
+  type: ExperimentConfig
+  output_dir: ./output/train_hall_gt
+  learning_rate: 0.0005
+  epochs: 32
+  batch_size: 5120
+
+  # For ACE
+  training_buffer_size: 16000000
+  samples_per_image: 1024
+  visual_steps: 100
+
+reproject_loss:
+  type: ReproLoss
+  total_iterations: -1  # update in code
+  soft_clamp: 50
+  soft_clamp_min: 1
+  loss_type: dyntanh
+  circle_schedule: True
+
+scheduler:
+  max_lr:  0.005
+  cycle_momentum: False
+

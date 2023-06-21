@@ -145,4 +145,4 @@ def visualize_ep(
     name1 = os.path.basename(imf1)
     name2 = os.path.basename(imf2)
     save_file = f"./output/{name1}_{name2}.jpg"
-    draw_epipolar_line(im1color=im1, im2color=im2, fp1=name1, fp2=name2, F2to1=F2to1, save_file=save_file, num=10)
+    draw_epipolar_line(im1color=im1, im2color=im2, fp1=name1, fp2=name2, F2to1=F2to1, save_file=save_file, num=20)
