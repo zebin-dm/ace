@@ -10,7 +10,7 @@ test_data_cfg:
 net_cfg:
   type: NetConfig
   encoder_path: /mnt/nas/share-all/caizebin/03.dataset/ace/pretrained/ace_encoder_pretrained.pt
-  head_path: 
+  head_path: ./output/hall_table_train/dstpath.pt
 dsac_cfg:
   type: DSACStarConfig
 

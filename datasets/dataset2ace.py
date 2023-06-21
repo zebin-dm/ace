@@ -83,8 +83,7 @@ class DataSet2Ace():
             shutil.copy(imf, save_imf)
             metaf = imf.replace(".jpg", ".txt")
             transform, intrinsic = pose_txt_to_transfrom(metaf, return_intrinsic=True)
-            # pose = transform.inverse().matrix  # convert camera2world to world2camera
-            pose = transform.matrix  # camera2world
+            pose = transform.matrix  # ACE pose camera2world
             intrinsic = self.gen_intrinsic_matrix(intrinsic)
             np.savetxt(save_posef, pose)
             np.savetxt(save_calif, intrinsic)
