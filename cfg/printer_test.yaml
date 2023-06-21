@@ -1,0 +1,24 @@
+
+test_data_cfg:
+  type: CamLocDatasetVLP
+  root_dir: /mnt/nas/share-all/caizebin/03.dataset/ace/dstpath/20230620T101235+0800_Capture_OnePlus_printer_query
+  feat_subsample: 8
+  mode: 0 
+  image_height: 736
+  data_mean: [ 4.0178,  0.3302, -1.3898]
+
+net_cfg:
+  type: NetConfig
+  encoder_path: /mnt/nas/share-all/caizebin/03.dataset/ace/pretrained/ace_encoder_pretrained.pt
+  head_path: ./output/train_printer_gt/dstpath.pt
+
+dsac_cfg:
+  type: DSACStarConfig
+
+render_cfg:
+  type: RenderConfig
+  visualization: False
+
+exp_cfg:
+  type: ExperimentConfig
+  output_dir: ./output/printer_test

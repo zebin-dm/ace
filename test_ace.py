@@ -12,8 +12,8 @@ from torch.utils.data import DataLoader
 import dsacstar
 from ace_network import Regressor
 from ace_visualizer import ACEVisualizer
+from pydlutils.basic.yaml import paser_yaml_cfg
 from utils.metric import Metric
-from utils.configuration import paser_yaml_cfg
 from registry import ACE_REGISTRY
 
 if __name__ == '__main__':
@@ -69,7 +69,7 @@ if __name__ == '__main__':
     # Testing loop.
     testing_start_time = time.time()
     with torch.no_grad():
-        for image_B1HW, _, gt_pose_B44, _, intrinsics_B33, _, _, filenames in testset_loader:
+        for iter_idx, (image_B1HW, _, gt_pose_B44, _, intrinsics_B33, _, _, filenames) in enumerate(testset_loader):
             batch_size = image_B1HW.shape[0]
 
             image_B1HW = image_B1HW.to(device, non_blocking=True)
@@ -89,7 +89,9 @@ if __name__ == '__main__':
                 ppX = intrinsics_33[0, 2].item()
                 ppY = intrinsics_33[1, 2].item()
                 # We support a single focal length.
-                assert torch.allclose(intrinsics_33[0, 0], intrinsics_33[1, 1])
+                # assert torch.allclose(intrinsics_33[0, 0], intrinsics_33[1, 1])
+                fx = intrinsics_33[0, 0]
+                fy = intrinsics_33[1, 1]
 
                 # Remove path from file name
                 frame_name = Path(frame_path).name
@@ -98,19 +100,31 @@ if __name__ == '__main__':
                 out_pose = torch.zeros((4, 4))
 
                 # Compute the pose via RANSAC.
-                inlier_count = dsacstar.forward_rgb(
+                # inlier_count = dsacstar.forward_rgb(
+                #     scene_coordinates_3HW.unsqueeze(0),
+                #     out_pose,
+                #     dsac_cfg.hypotheses,
+                #     dsac_cfg.threshold,
+                #     focal_length,
+                #     ppX,
+                #     ppY,
+                #     dsac_cfg.inlieralpha,
+                #     dsac_cfg.maxpixelerror,
+                #     network.OUTPUT_SUBSAMPLE,
+                # )
+                inlier_count = dsacstar.forward_rgb_v2(
                     scene_coordinates_3HW.unsqueeze(0),
                     out_pose,
                     dsac_cfg.hypotheses,
                     dsac_cfg.threshold,
-                    focal_length,
+                    fx,
+                    fy,
                     ppX,
                     ppY,
                     dsac_cfg.inlieralpha,
                     dsac_cfg.maxpixelerror,
                     network.OUTPUT_SUBSAMPLE,
                 )
-
                 # Calculate translation error
                 t_err = float(torch.norm(gt_pose_44[0:3, 3] - out_pose[0:3, 3]))
 
@@ -152,6 +166,8 @@ if __name__ == '__main__':
                                f"{q_w} {q_xyz[0].item()} {q_xyz[1].item()} {q_xyz[2].item()} "
                                f"{t[0]} {t[1]} {t[2]} "
                                f"{r_err} {t_err} {inlier_count}\n")
+            if iter_idx % 100 == 0:
+                logger.info(f"eval progress: {iter_idx}/{len(testset_loader)}")
 
     metric.print()
     pose_log.close()

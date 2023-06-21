@@ -1,0 +1,32 @@
+
+test_data_cfg:
+  type: CamLocDatasetVLP
+  root_dir: /mnt/nas/share-all/caizebin/03.dataset/ace/dstpath/20220928T170109+0800_Capture_Xiaomi_21051182C_no2_office_table_full
+  feat_subsample: 8
+  mode: 0 
+  image_height: 736
+  data_mean: [-31.8155,  -0.8436, -20.9305]
+
+
+train_data_cfg:
+  type: CamLocDatasetVLP
+  root_dir: /mnt/nas/share-all/caizebin/03.dataset/ace/office_gt/dst_path/20220928T170109+0800_Capture_Xiaomi_21051182C_no2_office_table_full
+  feat_subsample: 8
+  mode: 0 
+  image_height: 736
+
+
+net_cfg:
+  type: NetConfig
+  encoder_path: /mnt/nas/share-all/caizebin/03.dataset/ace/pretrained/ace_encoder_pretrained.pt
+  head_path: ./output/office_table_train/dstpath.pt
+dsac_cfg:
+  type: DSACStarConfig
+
+render_cfg:
+  type: RenderConfig
+  visualization: False
+
+exp_cfg:
+  type: ExperimentConfig
+  output_dir: ./output/office_table_test

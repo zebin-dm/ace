@@ -1,4 +1,4 @@
-from utils.registry import Registry
+from pydlutils.basic.registry import Registry
 from dataset import CamLocDataset
 from dataset_vlp import CamLocDatasetVLP
 from config import (

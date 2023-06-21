@@ -180,6 +180,128 @@ int dsacstar_rgb_forward(
 	// Return the inlier count. cv::sum returns a scalar, so we return its first element.
 	return cv::sum(inlierMap)[0];
 }
+
+
+int dsacstar_rgb_forward_v2(
+	at::Tensor sceneCoordinatesSrc, 
+	at::Tensor outPoseSrc,
+	int ransacHypotheses, 
+	float inlierThreshold,
+	float fx,
+	float fy,
+	float ppointX,
+	float ppointY,
+	float inlierAlpha,
+	float maxReproj,
+	int subSampling)
+{
+	ThreadRand::init();
+
+	// access to tensor objects
+	dsacstar::coord_t sceneCoordinates = 
+		sceneCoordinatesSrc.accessor<float, 4>();
+
+	// dimensions of scene coordinate predictions
+	int imH = sceneCoordinates.size(2);
+	int imW = sceneCoordinates.size(3);
+
+	// internal camera calibration matrix
+	cv::Mat_<float> camMat = cv::Mat_<float>::eye(3, 3);
+	camMat(0, 0) = fx;
+	camMat(1, 1) = fy;
+	camMat(0, 2) = ppointX;
+	camMat(1, 2) = ppointY;	
+
+	// calculate original image position for each scene coordinate prediction
+	cv::Mat_<cv::Point2i> sampling = 
+		dsacstar::createSampling(imW, imH, subSampling, 0, 0);
+
+	// std::cout << BLUETEXT("Sampling " << ransacHypotheses << " hypotheses.") << std::endl;
+	StopWatch stopW;
+
+	// sample RANSAC hypotheses
+	std::vector<dsacstar::pose_t> hypotheses;
+	std::vector<std::vector<cv::Point2i>> sampledPoints;  
+	std::vector<std::vector<cv::Point2f>> imgPts;
+	std::vector<std::vector<cv::Point3f>> objPts;
+
+	dsacstar::sampleHypotheses(
+		sceneCoordinates,
+		sampling,
+		camMat,
+		ransacHypotheses,
+		MAX_HYPOTHESES_TRIES,
+		inlierThreshold,
+		hypotheses,
+		sampledPoints,
+		imgPts,
+		objPts);
+
+	// std::cout << "Done in " << stopW.stop() / 1000 << "s." << std::endl;	
+	// std::cout << BLUETEXT("Calculating scores.") << std::endl;
+    
+	// compute reprojection error images
+	std::vector<cv::Mat_<float>> reproErrs(ransacHypotheses);
+	cv::Mat_<double> jacobeanDummy;
+
+	#pragma omp parallel for 
+	for(unsigned h = 0; h < hypotheses.size(); h++)
+    	reproErrs[h] = dsacstar::getReproErrs(
+		sceneCoordinates,
+		hypotheses[h], 
+		sampling, 
+		camMat,
+		maxReproj,
+		jacobeanDummy);
+
+    // soft inlier counting
+	std::vector<double> scores = dsacstar::getHypScores(
+    	reproErrs,
+    	inlierThreshold,
+    	inlierAlpha);
+
+	// std::cout << "Done in " << stopW.stop() / 1000 << "s." << std::endl;
+	// std::cout << BLUETEXT("Drawing final hypothesis.") << std::endl;	
+
+	// apply soft max to scores to get a distribution
+	std::vector<double> hypProbs = dsacstar::softMax(scores);
+	double hypEntropy = dsacstar::entropy(hypProbs); // measure distribution entropy
+	int hypIdx = dsacstar::draw(hypProbs, false); // select winning hypothesis
+
+	// std::cout << "Soft inlier count: " << scores[hypIdx] << " (Selection Probability: " << (int) (hypProbs[hypIdx]*100) << "%)" << std::endl; 
+	// std::cout << "Entropy of hypothesis distribution: " << hypEntropy << std::endl;
+
+
+	// std::cout << "Done in " << stopW.stop() / 1000 << "s." << std::endl;
+	// std::cout << BLUETEXT("Refining winning pose:") << std::endl;
+
+	// refine selected hypothesis
+	cv::Mat_<int> inlierMap;
+
+	dsacstar::refineHyp(
+		sceneCoordinates,
+		reproErrs[hypIdx],
+		sampling,
+		camMat,
+		inlierThreshold,
+		MAX_REF_STEPS,
+		maxReproj,
+		hypotheses[hypIdx],
+		inlierMap);
+
+	// std::cout << "Done in " << stopW.stop() / 1000 << "s." << std::endl;
+
+	// write result back to PyTorch
+	dsacstar::trans_t estTrans = dsacstar::pose2trans(hypotheses[hypIdx]);
+
+	auto outPose = outPoseSrc.accessor<float, 2>();
+	for(unsigned x = 0; x < 4; x++)
+	for(unsigned y = 0; y < 4; y++)
+		outPose[y][x] = estTrans(y, x);
+
+	// Return the inlier count. cv::sum returns a scalar, so we return its first element.
+	return cv::sum(inlierMap)[0];
+}
 //
 ///**
 // * @brief Performs pose estimation, and calculates the gradients of the pose loss wrt to scene coordinates.
@@ -893,6 +1015,8 @@ int dsacstar_rgb_forward(
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
 	m.def("forward_rgb", &dsacstar_rgb_forward, "DSAC* forward (RGB)");
+	m.def("forward_rgb_v2", &dsacstar_rgb_forward_v2, "DSAC* forward (RGB)");
+
 //	m.def("backward_rgb", &dsacstar_rgb_backward, "DSAC* backward (RGB)");
 //	m.def("forward_rgbd", &dsacstar_rgbd_forward, "DSAC* forward (RGB-D)");
 //	m.def("backward_rgbd", &dsacstar_rgbd_backward, "DSAC* backward (RGB-D)");

@@ -5,13 +5,12 @@ from loguru import logger
 from torch.cuda.amp import GradScaler, autocast
 from torch.utils.data import DataLoader
 from torch.utils.data import sampler
-
+from pydlutils.basic.yaml import paser_yaml_cfg
 from utils.ace_util import get_pixel_grid, to_homogeneous
 from ace_network import Regressor
 from ace_visualizer import ACEVisualizer
 from utils.utils import set_seed, seed_worker
 from registry import ACE_REGISTRY
-from utils.configuration import paser_yaml_cfg
 
 
 class TrainerACE:

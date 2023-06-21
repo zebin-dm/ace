@@ -1,10 +1,13 @@
 import os
 import random
 import cv2
+import math
 import torch
 import numpy as np
 import torchvision.transforms.functional as TF
+from omegaconf import OmegaConf
 
+from typing import List
 from skimage import io
 from skimage import color
 from loguru import logger
@@ -36,6 +39,7 @@ class CamLocDatasetVLP(Dataset):
         num_clusters=None,
         cluster_idx=None,
         debug: bool = False,
+        data_mean: List = None,
     ):
         """
         Parameters:
@@ -119,8 +123,13 @@ class CamLocDatasetVLP(Dataset):
             logger.info(f"After clustering, chosen cluster: {cluster_idx}, Using {len(self.valid_file_indices)} images.")
 
         # Calculate mean camera center (using the valid frames only).
-        self.mean_cam_center = self._compute_mean_camera_center()
-        logger.info(f"Load scene: {self.get_scene()} - {self.__len__()}, Mean: {self.mean_cam_center}")
+        if data_mean is not None:
+            data_mean = OmegaConf.to_object(data_mean)
+            logger.info(f"mean: type: {type(data_mean)}, value: {data_mean}")
+            self.mean_cam_center = torch.tensor(data_mean, dtype=torch.float)
+        else:
+            self.mean_cam_center = self._compute_mean_camera_center()
+            logger.info(f"Load scene: {self.get_scene()} - {self.__len__()}, Mean: {self.mean_cam_center}")
 
     def get_names(self, pose_path: str):
         name_list = os.listdir(pose_path)

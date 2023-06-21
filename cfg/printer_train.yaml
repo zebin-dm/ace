@@ -1,19 +1,10 @@
-# vis_data_cfg:
-#   type: CamLocDatasetVLP
-#   root_dir: /mnt/nas/share-all/caizebin/03.dataset/ace/minimum/dst_path/minimum_season/train
-#   feat_subsample: 8
-#   mode: 0 
-#   image_height: 480
-#   use_half: True
-#   augment: False
-
 train_data_cfg:
   type: CamLocDatasetVLP
-  root_dir: /mnt/nas/share-all/caizebin/03.dataset/ace/minimum/dst_path/minimum_season/train
+  root_dir: /mnt/nas/share-all/caizebin/03.dataset/ace/dstpath/20230620T100947+0800_Capture_OnePlus_printer
   feat_subsample: 8
   mode: 0
   use_half: True
-  image_height: 1080
+  image_height: 736
   augment: True
   aug_rotation: 15
   aug_scale_max: 1.5
@@ -38,9 +29,9 @@ render_cfg:
 
 exp_cfg:
   type: ExperimentConfig
-  output_dir: ./output/train_minimun_season
+  output_dir: ./output/printer_train
   learning_rate: 0.0005
-  epochs: 32
+  epochs: 64
   batch_size: 5120
 
   # For ACE

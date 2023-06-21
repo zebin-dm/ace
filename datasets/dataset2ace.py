@@ -83,7 +83,7 @@ class DataSet2Ace():
             shutil.copy(imf, save_imf)
             metaf = imf.replace(".jpg", ".txt")
             transform, intrinsic = pose_txt_to_transfrom(metaf, return_intrinsic=True)
-            pose = transform.inverse().matrix  # convert camera2world to world2camera
+            pose = transform.matrix  # ACE pose camera2world
             intrinsic = self.gen_intrinsic_matrix(intrinsic)
             np.savetxt(save_posef, pose)
             np.savetxt(save_calif, intrinsic)
@@ -117,6 +117,39 @@ class DataSet2Ace():
             save_calif = f"{calibration}/{file_name}.calibration.txt"
             np.savetxt(save_calif, intrinsic)
 
+    def generate_ace2ace(self):
+        src_rgb_path = f"{self.src_path}/rgb"
+        src_poses_path = f"{self.src_path}/poses"
+        src_calibration = f"{self.src_path}/calibration"
+        dst_rgb_path = f"{self.dst_path}/rgb"
+        dst_poses_path = f"{self.dst_path}/poses"
+        dst_calibration = f"{self.dst_path}/calibration"
+        os.makedirs(dst_rgb_path, exist_ok=True)
+        os.makedirs(dst_poses_path, exist_ok=True)
+        os.makedirs(dst_calibration, exist_ok=True)
+
+        images = glob.glob(f"{src_rgb_path}/*.color.png")
+        for idx, image_file in enumerate(images):
+            file_name = os.path.basename(image_file).replace(".color.png", "")
+            src_imf = f"{src_rgb_path}/{file_name}.color.png"
+            save_imf = f"{dst_rgb_path}/{file_name}.color.png"
+            shutil.copy(src_imf, save_imf)
+            src_posef = f"{src_poses_path}/{file_name}.pose.txt"
+            dst_posef = f"{dst_poses_path}/{file_name}.pose.txt"
+            shutil.copy(src_posef, dst_posef)
+
+            src_calibrationf = f"{src_calibration}/{file_name}.calibration.txt"
+            dst_calibrationf = f"{dst_calibration}/{file_name}.calibration.txt"
+            focal_length = float(np.loadtxt(src_calibrationf))
+
+            intrinsics = np.eye(3)
+            intrinsics[0, 0] = focal_length
+            intrinsics[1, 1] = focal_length
+            # Hardcode the principal point to the centre of the image.
+            intrinsics[0, 2] = 640 / 2
+            intrinsics[1, 2] = 480 / 2
+            np.savetxt(dst_calibrationf, intrinsics)
+
 
 class ACEVisualize():
 
@@ -142,33 +175,86 @@ class ACEVisualize():
         intrinsics[1, 2] = h / 2
         return intrinsics.numpy()
 
-    def visualize(self, datapath, name1, name2):
-        rgb_path = f"{datapath}/rgb"
-        poses_path = f"{datapath}/poses"
-        calibration_path = f"{datapath}/calibration"
-        imf1 = f"{rgb_path}/{name1}.color.png"
-        imf2 = f"{rgb_path}/{name2}.color.png"
-        posef1 = f"{poses_path}/{name1}.pose.txt"
-        posef2 = f"{poses_path}/{name2}.pose.txt"
-        calif1 = f"{calibration_path}/{name1}.calibration.txt"
-        calif2 = f"{calibration_path}/{name2}.calibration.txt"
+    def visualize(self, datapath1, datapath2, name1, name2):
+        rgb_path1 = f"{datapath1}/rgb"
+        poses_path1 = f"{datapath1}/poses"
+        calibration_path1 = f"{datapath1}/calibration"
+
+        rgb_path2 = f"{datapath2}/rgb"
+        poses_path2 = f"{datapath2}/poses"
+        calibration_path2 = f"{datapath2}/calibration"
+        imf1 = f"{rgb_path1}/{name1}.color.png"
+        imf2 = f"{rgb_path2}/{name2}.color.png"
+        posef1 = f"{poses_path1}/{name1}.pose.txt"
+        posef2 = f"{poses_path2}/{name2}.pose.txt"
+        calif1 = f"{calibration_path1}/{name1}.calibration.txt"
+        calif2 = f"{calibration_path2}/{name2}.calibration.txt"
 
         pose1 = self.load_pose(posef1)
         pose2 = self.load_pose(posef2)
 
+        pose1 = Transform(mat=pose1).inverse().matrix
+        pose2 = Transform(mat=pose2).inverse().matrix
         intrinsic1 = self.load_pose(calif1)
         intrinsic2 = self.load_pose(calif2)
 
         visualize_ep(imf1, imf2, pose1, pose2, intrinsic1, intrinsic2)
 
 
-def test_vlp2ace():
-    config = {
-        "src_path": "/mnt/nas/share-all/caizebin/03.dataset/ace/minimum/origin/20220719T161313+0800_xvnxa_xvnxa001_mini_test",
-        "dst_path": "/mnt/nas/share-all/caizebin/03.dataset/ace/minimum/dst_path/minimum_test"
-    }
-    data_ins = DataSet2Ace(config=config)
-    data_ins.generate_vlp2ace()
+def test_7scene_chess2ace_test():
+    src_path = "/mnt/nas/share-all/caizebin/03.dataset/ace/7scenes_ace/7scenes_chess"
+    dst_path = "/mnt/nas/share-all/caizebin/03.dataset/ace/dstpath/7scenes_chess"
+    sessions = [
+        "test",
+        "train",
+    ]
+    for sess in sessions:
+        config = {
+            "src_path": f"{src_path}/{sess}",
+            "dst_path": f"{dst_path}/{sess}",
+        }
+        data_ins = DataSet2Ace(config=config)
+        data_ins.generate_ace2ace()
+
+
+def test_vlp2ace_office_and_hall():
+    src_path = "/mnt/nas/share-all/caizebin/03.dataset/ace/origin"
+    dst_path = "/mnt/nas/share-all/caizebin/03.dataset/ace/dstpath"
+    sessions = [
+        "20220928T170109+0800_Capture_Xiaomi_21051182C_no2_office_table_full",
+        "20220928T170202+0800_Capture_Xiaomi_21051182C_no2_office_table_full_2",
+        "20221208T164151+0800_Capture_hall_table_full",
+        "20221208T164222+0800_Capture_hall_table_2",
+    ]
+
+    for sess in sessions:
+        print(f"Processing session: {sess}")
+        config = {
+            "src_path": f"{src_path}/{sess}",
+            "dst_path": f"{dst_path}/{sess}",
+        }
+        data_ins = DataSet2Ace(config=config)
+        data_ins.generate_vlp2ace()
+
+
+def test_vlp2ace_food_and_printer():
+    src_path = "/mnt/nas/share-all/caizebin/03.dataset/ace/origin"
+    dst_path = "/mnt/nas/share-all/caizebin/03.dataset/ace/dstpath"
+    sessions = [
+        "20230620T100624+0800_Capture_OnePlus_food",
+        "20230620T100904+0800_Capture_OnePlus_food_query",
+        "20230620T100947+0800_Capture_OnePlus_printer",
+        "20230620T101235+0800_Capture_OnePlus_printer_query",
+    ]
+
+    for sess in sessions:
+        print(f"Processing session: {sess}")
+        config = {
+            "src_path": f"{src_path}/{sess}",
+            "dst_path": f"{dst_path}/{sess}",
+        }
+        data_ins = DataSet2Ace(config=config)
+        data_ins.generate_vlp2ace()
 
 
 def test_colmap2ace():
@@ -181,19 +267,45 @@ def test_colmap2ace():
 
 
 def test_ace_visulize():
-    datapath = "/mnt/nas/share-all/caizebin/03.dataset/ace/7scenes_ace/7scenes_chess/test"
+    datapath1 = "/mnt/nas/share-all/caizebin/03.dataset/ace/dstpath/7scenes_chess/test"
+    datapath2 = "/mnt/nas/share-all/caizebin/03.dataset/ace/dstpath/7scenes_chess/test"
     name1 = "seq-05-frame-000998"
-    name2 = "seq-05-frame-000999"
+    name2 = "seq-05-frame-000102"
     visualize = ACEVisualize()
-    visualize.visualize(datapath, name1, name2)
+    visualize.visualize(datapath1, datapath2, name1, name2)
 
 
 def test_ace_visulize_vlp():
-    datapath = "/mnt/nas/share-all/caizebin/03.dataset/ace/minimum/dst_path/minimum/train"
-    name1 = "BASE@20220318T160216+0800_xvnxa_xvnxa002_JMWtest@16dd6afceb8925f1@camera_left@3403b6cfe30f6f85"
-    name2 = "BASE@20220318T160216+0800_xvnxa_xvnxa002_JMWtest@16dd6afcd3aa714a@camera_left@3403b6cfe30f7889"
+    datapath1 = "/mnt/nas/share-all/caizebin/03.dataset/ace/hall_gt/dst_path/20221208T164151+0800_Capture_hall_table_full"
+    datapath2 = "/mnt/nas/share-all/caizebin/03.dataset/ace/hall_gt/dst_path/20221208T164222+0800_Capture_hall_table_2"
+    name1 = "BASE@20221208T164151+0800_Capture_hall_table_full@0000000000000186@image@1000000000000001"
+    name2 = "BASE@20221208T164222+0800_Capture_hall_table_2@0000000000000165@image@1000000000000001"
+
     visualize = ACEVisualize()
-    visualize.visualize(datapath, name1, name2)
+    visualize.visualize(datapath1=datapath1, datapath2=datapath2, name1=name1, name2=name2)
+
+    datapath1 = "/mnt/nas/share-all/caizebin/03.dataset/ace/office_gt/dst_path/20220928T170109+0800_Capture_Xiaomi_21051182C_no2_office_table_full"
+    datapath2 = "/mnt/nas/share-all/caizebin/03.dataset/ace/office_gt/dst_path/20220928T170202+0800_Capture_Xiaomi_21051182C_no2_office_table_full_2"
+    name1 = "BASE@20220928T170109+0800_Capture_Xiaomi_21051182C_no2_office_table_full@000000000000025c@image@1000000000000001"
+    name2 = "BASE@20220928T170202+0800_Capture_Xiaomi_21051182C_no2_office_table_full_2@00000000000002a1@image@1000000000000001"
+    visualize = ACEVisualize()
+    visualize.visualize(datapath1=datapath1, datapath2=datapath2, name1=name1, name2=name2)
+
+
+def test_ace_visulize_food_and_printer():
+    datapath1 = "/mnt/nas/share-all/caizebin/03.dataset/ace/dstpath/20230620T100624+0800_Capture_OnePlus_food"
+    datapath2 = "/mnt/nas/share-all/caizebin/03.dataset/ace/dstpath/20230620T100904+0800_Capture_OnePlus_food_query"
+    name1 = "BASE@20230620T100624+0800_Capture_OnePlus_food@0000000000000927@image@1000000000000001"
+    name2 = "BASE@20230620T100904+0800_Capture_OnePlus_food_query@000000000000014e@image@1000000000000001"
+    visualize = ACEVisualize()
+    visualize.visualize(datapath1=datapath1, datapath2=datapath2, name1=name1, name2=name2)
+
+    datapath1 = "/mnt/nas/share-all/caizebin/03.dataset/ace/dstpath/20230620T100947+0800_Capture_OnePlus_printer"
+    datapath2 = "/mnt/nas/share-all/caizebin/03.dataset/ace/dstpath/20230620T101235+0800_Capture_OnePlus_printer_query"
+    name1 = "BASE@20230620T100947+0800_Capture_OnePlus_printer@0000000000000866@image@1000000000000001"
+    name2 = "BASE@20230620T101235+0800_Capture_OnePlus_printer_query@000000000000014b@image@1000000000000001"
+    visualize = ACEVisualize()
+    visualize.visualize(datapath1=datapath1, datapath2=datapath2, name1=name1, name2=name2)
 
 
 def test_ace_visulize_colmap():
