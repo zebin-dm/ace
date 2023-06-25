@@ -1,16 +1,13 @@
 import cv2
 import math
-import time
 import torch
 import numpy as np
-
 from pathlib import Path
 from loguru import logger
 from torch.cuda.amp import autocast
 from torch.utils.data import DataLoader
 
 import dsacstar
-from ace_network import Regressor
 from ace_visualizer import ACEVisualizer
 from pydlutils.basic.yaml import paser_yaml_cfg
 from utils.metric import Metric
@@ -27,17 +24,9 @@ if __name__ == '__main__':
     # Setup dataset.
     testset = ACE_REGISTRY.build(config.test_data_cfg)
     logger.info(f'Test images found: {len(testset)}')
-    # Setup dataloader. Batch size 1 by default.
     testset_loader = DataLoader(testset, shuffle=False, num_workers=6)
 
-    # Load network weights.
-    encoder_state_dict = torch.load(net_cfg.encoder_path, map_location="cpu")
-    logger.info(f"Loaded encoder from: {net_cfg.encoder_path}")
-    head_state_dict = torch.load(net_cfg.head_path, map_location="cpu")
-    logger.info(f"Loaded head weights from: {net_cfg.head_path}")
-
-    # Create regressor.
-    network = Regressor.create_from_split_state_dict(encoder_state_dict, head_state_dict)
+    network = ACE_REGISTRY.build(config.net_cfg)
     network = network.to(device)
     network.eval()
 
@@ -47,6 +36,7 @@ if __name__ == '__main__':
     pose_log = open(pose_log_file, 'w', 1)
 
     # Generate video of training process
+    ace_visualizer = None
     if render_cfg.visualization:
         ace_visualizer = ACEVisualizer(target_path=f"{exp_cfg.output_dir}/{render_cfg.target_path}",
                                        flipped_portait=render_cfg.flipped_portait,
@@ -63,17 +53,12 @@ if __name__ == '__main__':
                                                  network=network,
                                                  camera_z_offset=render_cfg.camera_z_offset,
                                                  reloc_frame_skip=render_cfg.frame_skip)
-    else:
-        ace_visualizer = None
+
     metric = Metric()
-    # Testing loop.
-    testing_start_time = time.time()
+
     with torch.no_grad():
         for iter_idx, (image_B1HW, _, gt_pose_B44, _, intrinsics_B33, _, _, filenames) in enumerate(testset_loader):
-            batch_size = image_B1HW.shape[0]
-
             image_B1HW = image_B1HW.to(device, non_blocking=True)
-
             # Predict scene coordinates.
             with autocast(enabled=True):
                 scene_coordinates_B3HW = network(image_B1HW)
@@ -160,10 +145,9 @@ if __name__ == '__main__':
                 # Axis angle to quaternion.
                 q_w = math.cos(angle * 0.5)
                 q_xyz = math.sin(angle * 0.5) * axis
-
                 # Write to output file. All in a single line.
                 pose_log.write(f"{frame_name} "
-                               f"{q_w} {q_xyz[0].item()} {q_xyz[1].item()} {q_xyz[2].item()} "
+                               f"{q_w} {q_xyz[0]} {q_xyz[1]} {q_xyz[2]} "
                                f"{t[0]} {t[1]} {t[2]} "
                                f"{r_err} {t_err} {inlier_count}\n")
             if iter_idx % 100 == 0:

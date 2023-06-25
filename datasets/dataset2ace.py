@@ -192,9 +192,6 @@ class ACEVisualize():
 
         pose1 = self.load_pose(posef1)
         pose2 = self.load_pose(posef2)
-
-        pose1 = Transform(mat=pose1).inverse().matrix
-        pose2 = Transform(mat=pose2).inverse().matrix
         intrinsic1 = self.load_pose(calif1)
         intrinsic2 = self.load_pose(calif2)
 

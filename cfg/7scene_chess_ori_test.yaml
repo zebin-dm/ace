@@ -1,4 +1,3 @@
-
 test_data_cfg:
   type: CamLocDataset
   root_dir: /mnt/nas/share-all/caizebin/03.dataset/ace/7scenes_ace/7scenes_chess/test

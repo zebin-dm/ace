@@ -3,14 +3,6 @@ from dataclasses import dataclass
 
 
 @dataclass
-class NetConfig:
-    encoder_path: str = None  # pre-trained encoder weights
-    head_path: str = None  # head network weights path
-    num_head_blocks: int = 1
-    use_homogeneous: bool = True
-
-
-@dataclass
 class DSACStarConfig:
     hypotheses: int = 64  # number of hypotheses, i.e. number of RANSAC iterations
     threshold: float = 10  # inlier threshold in pixels (RGB) or centimeters (RGB-D)

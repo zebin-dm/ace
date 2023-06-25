@@ -1,13 +1,13 @@
 import torch
 import torch.optim as optim
 import torchvision.transforms.functional as TF
+from omegaconf import OmegaConf
 from loguru import logger
 from torch.cuda.amp import GradScaler, autocast
 from torch.utils.data import DataLoader
 from torch.utils.data import sampler
 from pydlutils.basic.yaml import paser_yaml_cfg
 from utils.ace_util import get_pixel_grid, to_homogeneous
-from ace_network import Regressor
 from ace_visualizer import ACEVisualizer
 from utils.utils import set_seed, seed_worker
 from registry import ACE_REGISTRY
@@ -35,15 +35,9 @@ class TrainerACE:
         self.dataset = ACE_REGISTRY.build(self.config.train_data_cfg)
 
         # Create network using the state dict of the pretrained encoder.
-        net_cfg = self.config.net_cfg
-        logger.info(f"Loading encoder from: {net_cfg.encoder_path}")
-        encoder_state_dict = torch.load(net_cfg.encoder_path, map_location="cpu")
-        self.regressor = Regressor.create_from_encoder(
-            encoder_state_dict,
-            mean=self.dataset.mean_cam_center,
-            num_head_blocks=net_cfg.num_head_blocks,
-            use_homogeneous=net_cfg.use_homogeneous,
-        )
+        net_cfg = OmegaConf.to_object(self.config.net_cfg)
+        net_cfg["mean"] = self.dataset.mean_cam_center
+        self.regressor = ACE_REGISTRY.build(net_cfg)
         self.regressor = self.regressor.to(self.device)
 
         # Setup optimization parameters.
