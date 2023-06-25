@@ -1,19 +1,7 @@
-
 test_data_cfg:
   type: CamLocDatasetVLP
   root_dir: /mnt/nas/share-all/caizebin/03.dataset/ace/dstpath/7scenes_chess/test
-  feat_subsample: 8
-  mode: 0 
   image_height: 480
-
-
-train_data_cfg:
-  type: CamLocDatasetVLP
-  root_dir: /mnt/nas/share-all/caizebin/03.dataset/ace/7scenes_ace/7scenes_chess/train
-  feat_subsample: 8
-  mode: 0 
-  image_height: 480
-
 
 net_cfg:
   type: NetConfig

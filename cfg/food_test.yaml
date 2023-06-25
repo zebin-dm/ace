@@ -1,20 +1,12 @@
-
 test_data_cfg:
   type: CamLocDatasetVLP
   root_dir: /mnt/nas/share-all/caizebin/03.dataset/ace/dstpath/20230620T100904+0800_Capture_OnePlus_food_query
-  feat_subsample: 8
-  mode: 0 
   image_height: 736
-  data_mean: [1.7261,  0.3615, -0.2821]
-
 
 train_data_cfg:
   type: CamLocDatasetVLP
   root_dir: /mnt/nas/share-all/caizebin/03.dataset/ace/dstpath/20230620T100904+0800_Capture_OnePlus_food_query
-  feat_subsample: 8
-  mode: 0 
   image_height: 736
-
 
 net_cfg:
   type: NetConfig

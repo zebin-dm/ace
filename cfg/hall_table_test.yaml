@@ -1,11 +1,7 @@
-
 test_data_cfg:
   type: CamLocDatasetVLP
   root_dir: /mnt/nas/share-all/caizebin/03.dataset/ace/dstpath/20221208T164222+0800_Capture_hall_table_2
-  feat_subsample: 8
-  mode: 0 
   image_height: 736
-  data_mean: [-9.4845,  0.5278,  9.4705]
 
 net_cfg:
   type: NetConfig

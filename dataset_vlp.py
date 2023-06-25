@@ -5,9 +5,7 @@ import math
 import torch
 import numpy as np
 import torchvision.transforms.functional as TF
-from omegaconf import OmegaConf
 
-from typing import List
 from skimage import io
 from skimage import color
 from loguru import logger
@@ -25,10 +23,7 @@ class CamLocDatasetVLP(Dataset):
     def __init__(
         self,
         root_dir: str,
-        feat_subsample: int,
-        mode: int = 0,
-        sparse=False,
-        augment=False,
+        training: bool = False,
         aug_rotation=15,
         aug_scale_min=2 / 3,
         aug_scale_max=3 / 2,
@@ -39,19 +34,12 @@ class CamLocDatasetVLP(Dataset):
         num_clusters=None,
         cluster_idx=None,
         debug: bool = False,
-        data_mean: List = None,
+        feat_subsample: int = 8,
     ):
         """
         Parameters:
             root_dir: Folder of the data (training or test).
-            mode:
-                0 = RGB only, load no initialization targets. Default for the ACE paper.
-                1 = RGB + ground truth scene coordinates, load or generate ground truth scene coordinate targets
-                2 = RGB-D, load camera coordinates instead of scene coordinates
-            sparse: for mode = 1 (RGB+GT SC), load sparse initialization targets when True, load dense depth maps and
-                generate initialization targets when False
-            augment: Use random data augmentation, note: not supported for mode = 2 (RGB-D) since pre-generated eye
-                coordinates cannot be augmented
+            training: train or test
             aug_rotation: Max 2D image rotation angle, sampled uniformly around 0, both directions, degrees.
             aug_scale_min: Lower limit of image scale factor for uniform sampling
             aug_scale_min: Upper limit of image scale factor for uniform sampling
@@ -65,12 +53,12 @@ class CamLocDatasetVLP(Dataset):
                 target clusters will result in the same split. See the paper for details of the approach. Disabled by
                 default.
             cluster_idx: If num_clusters is not None, then use this parameter to choose the cluster used for training.
+            feat_subsample: set defalut for the pretrain feature extractor. do not change, only change with new feature extractor.
         """
         self.feat_subsample = feat_subsample  # the sampe value as ace_network.Regressor.OUTPUT_SUBSAMPLE
         self.use_half = use_half
-        self.sparse = sparse
         self.image_height = image_height
-        self.augment = augment
+        self.training = training
         self.aug_rotation = aug_rotation
         self.aug_scale_min = aug_scale_min
         self.aug_scale_max = aug_scale_max
@@ -80,7 +68,6 @@ class CamLocDatasetVLP(Dataset):
 
         self.num_clusters = num_clusters
         self.cluster_idx = cluster_idx
-        assert mode == 0, "only support model=0"
         if self.num_clusters is not None:
             assert self.num_clusters > 0, "num_clusters must be at least 1"
             assert self.cluster_idx is not None, "cluster_idx needs to be specified when num_clusters is set"
@@ -93,27 +80,8 @@ class CamLocDatasetVLP(Dataset):
         self.calibration_dir = f"{root_dir}/calibration"
         self.file_names = self.get_names(self.pose_dir)
 
-        # Image transformations. Excluding scale since that can vary batch-by-batch.
-        # statistics calculated over 7scenes training set, should generalize fairly well
-        mean = [0.4]
-        std = [0.25]
-        if self.augment:
-            self.image_transform = transforms.Compose([
-                transforms.Grayscale(),
-                transforms.ColorJitter(brightness=self.aug_black_white, contrast=self.aug_black_white),
-                transforms.ToTensor(),
-                transforms.Normalize(mean=mean, std=std),
-            ])
-        else:
-            self.image_transform = transforms.Compose([
-                transforms.Grayscale(),
-                transforms.ToTensor(),
-                transforms.Normalize(mean=mean, std=std),
-            ])
-
         # We use this to iterate over all frames. If clustering is enabled this is used to filter them.
         self.valid_file_indices = np.arange(len(self.file_names))
-
         # If clustering is enabled.
         if self.num_clusters is not None:
             logger.info(f"Clustering the {len(self.rgb_files)} into {num_clusters} clusters.")
@@ -122,14 +90,27 @@ class CamLocDatasetVLP(Dataset):
             self.valid_file_indices = np.flatnonzero(cluster_labels == cluster_idx)
             logger.info(f"After clustering, chosen cluster: {cluster_idx}, Using {len(self.valid_file_indices)} images.")
 
-        # Calculate mean camera center (using the valid frames only).
-        if data_mean is not None:
-            data_mean = OmegaConf.to_object(data_mean)
-            logger.info(f"mean: type: {type(data_mean)}, value: {data_mean}")
-            self.mean_cam_center = torch.tensor(data_mean, dtype=torch.float)
-        else:
+        # Image transformations. Excluding scale since that can vary batch-by-batch.
+        # statistics calculated over 7scenes training set, should generalize fairly well
+        mean = [0.4]
+        std = [0.25]
+        if self.training:
+            self.image_transform = transforms.Compose([
+                transforms.Grayscale(),
+                transforms.ColorJitter(brightness=self.aug_black_white, contrast=self.aug_black_white),
+                transforms.ToTensor(),
+                transforms.Normalize(mean=mean, std=std),
+            ])
+
+            # Calculate mean camera center (using the valid frames only).
             self.mean_cam_center = self._compute_mean_camera_center()
             logger.info(f"Load scene: {self.get_scene()} - {self.__len__()}, Mean: {self.mean_cam_center}")
+        else:
+            self.image_transform = transforms.Compose([
+                transforms.Grayscale(),
+                transforms.ToTensor(),
+                transforms.Normalize(mean=mean, std=std),
+            ])
 
     def get_names(self, pose_path: str):
         name_list = os.listdir(pose_path)
@@ -334,27 +315,27 @@ class CamLocDatasetVLP(Dataset):
         pose = self._load_pose(idx)
 
         # Apply data augmentation if necessary.
-        # if self.augment:
-        #     angle = random.uniform(-self.aug_rotation, self.aug_rotation)
-        #     if self.debug:
-        #         debug_image = debug_image / 255.0
-        #         debug_image = rotate(debug_image, angle, order=1, mode='reflect')
-        #         logger.info(f"rotate imgae shape: {debug_image.shape}, {debug_image.dtype}")
-        #         debug_image = debug_image * 255.0
-        #         debug_image = debug_image.astype(np.uint8)
+        if self.training:
+            angle = random.uniform(-self.aug_rotation, self.aug_rotation)
+            if self.debug:
+                debug_image = debug_image / 255.0
+                debug_image = rotate(debug_image, angle, order=1, mode='reflect')
+                logger.info(f"rotate imgae shape: {debug_image.shape}, {debug_image.dtype}")
+                debug_image = debug_image * 255.0
+                debug_image = debug_image.astype(np.uint8)
 
-        #     image = self._rotate_image(image, angle, 1, 'reflect')
-        #     image_mask = self._rotate_image(image_mask, angle, order=1, mode='constant')
-        #     # Rotate ground truth camera pose as well.
-        #     angle = angle * math.pi / 180.
-        #     # Create a rotation matrix.
-        #     pose_rot = torch.eye(4)
-        #     pose_rot[0, 0] = math.cos(angle)
-        #     pose_rot[0, 1] = -math.sin(angle)
-        #     pose_rot[1, 0] = math.sin(angle)
-        #     pose_rot[1, 1] = math.cos(angle)
-        #     # Apply rotation matrix to the ground truth camera pose.
-        #     pose = torch.matmul(pose, pose_rot)
+            image = self._rotate_image(image, angle, 1, 'reflect')
+            image_mask = self._rotate_image(image_mask, angle, order=1, mode='constant')
+            # Rotate ground truth camera pose as well.
+            angle = angle * math.pi / 180.
+            # Create a rotation matrix.
+            pose_rot = torch.eye(4)
+            pose_rot[0, 0] = math.cos(angle)
+            pose_rot[0, 1] = -math.sin(angle)
+            pose_rot[1, 0] = math.sin(angle)
+            pose_rot[1, 1] = math.cos(angle)
+            # Apply rotation matrix to the ground truth camera pose.
+            pose = torch.matmul(pose, pose_rot)
 
         if self.use_half:
             image = image.half()
@@ -373,7 +354,7 @@ class CamLocDatasetVLP(Dataset):
 
     def __getitem__(self, idx):
         scale_factor = 1
-        if self.augment:
+        if self.training:
             scale_factor = random.uniform(self.aug_scale_min, self.aug_scale_max)
 
         image_height = int(self.image_height * scale_factor)
@@ -387,10 +368,10 @@ class CamLocDatasetVLP(Dataset):
 if __name__ == "__main__":
     from utils.visualize import visualize_ep
     dataset = CamLocDatasetVLP(
-        root_dir="/mnt/nas/share-all/caizebin/03.dataset/ace/minimum/dst_path/minimum_season/train",
+        root_dir="/mnt/nas/share-all/caizebin/03.dataset/ace/dstpath/20220928T170202+0800_Capture_Xiaomi_21051182C_no2_office_table_full_2",
         feat_subsample=8,
         image_height=1080,
-        augment=True,
+        training=True,
         debug=True,
     )
     imf = []

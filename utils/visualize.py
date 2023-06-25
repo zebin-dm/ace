@@ -1,6 +1,7 @@
 import os
 import cv2
 import numpy as np
+from pose_transform import Transform
 
 
 def get_keep_aspect_ratio_info(dh, dw, sh, sw):
@@ -99,7 +100,7 @@ def skew(x):
 
 
 def get_f1to2(extrinsic1, extrinsic2, intrinsic1, intrinsic2, rot_thr=80.0):
-
+    # extrinsic1, extrinsic2: world to camera
     relative = extrinsic2.dot(np.linalg.inv(extrinsic1))
     R = relative[:3, :3]
     # remove pairs that have a relative rotation angle larger than 80 degrees
@@ -133,6 +134,9 @@ def visualize_ep(
     scale1: float = None,
     scale2: float = None,
 ):
+    # extrinsic1, extrinsic2: camera to world
+    pose1 = Transform(mat=pose1).inverse().matrix
+    pose2 = Transform(mat=pose2).inverse().matrix
     F2to1 = get_f1to2(pose2, pose1, intrinsic2, intrinsic1)
     if im1 is None:
         im1 = cv2.imread(imf1)
