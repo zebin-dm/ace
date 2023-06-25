@@ -1,1 +1,0 @@
-# from: https://github.com/colmap/colmap/tree/d8d3cfbdef8de706f1501f07ac78068741ad1d89/scripts/python

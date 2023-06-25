@@ -10,6 +10,7 @@ from typing import List
 
 _logger = logging.getLogger(__name__)
 
+
 @dataclass
 class FrameResult:
     inlier_count: int = 0
@@ -21,13 +22,10 @@ class FrameResult:
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
-    parser = ArgumentParser(
-        description="Merge results created by multiple nets trained on clustered datasets, "
-                    "keeping the best pose for each image (in terms of inlier count).")
-    parser.add_argument('poses_path', type=Path,
-                        help="Path to a folder containing the estimated poses for each network.")
-    parser.add_argument('out_file', type=Path,
-                        help="Path to the output file containing the best pose for each image.")
+    parser = ArgumentParser(description="Merge results created by multiple nets trained on clustered datasets, "
+                            "keeping the best pose for each image (in terms of inlier count).")
+    parser.add_argument('poses_path', type=Path, help="Path to a folder containing the estimated poses for each network.")
+    parser.add_argument('out_file', type=Path, help="Path to the output file containing the best pose for each image.")
     parser.add_argument('--poses_suffix', type=str, default='.txt', help='Suffix to select a subset of pose files.')
 
     args = parser.parse_args()
@@ -67,9 +65,8 @@ if __name__ == '__main__':
     with out_file.open('w') as f:
         for img_name in sorted(frame_poses.keys()):
             frame_result = frame_poses[img_name]
-            f.write(
-                f"{img_name} "
-                f"{' '.join(str(x) for x in frame_result.quaternion)} "
-                f"{' '.join(str(x) for x in frame_result.translation)} "
-                f"{frame_result.r_err} {frame_result.t_err} {frame_result.inlier_count}\n")
+            f.write(f"{img_name} "
+                    f"{' '.join(str(x) for x in frame_result.quaternion)} "
+                    f"{' '.join(str(x) for x in frame_result.translation)} "
+                    f"{frame_result.r_err} {frame_result.t_err} {frame_result.inlier_count}\n")
     _logger.info(f"Saved merged poses to: {out_file}")

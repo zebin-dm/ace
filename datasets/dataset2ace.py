@@ -9,7 +9,7 @@ from loguru import logger
 from pose_transform import Transform
 
 from utils.visualize import visualize_ep
-import thirdparty.colmap.read_write_model as read_write_model
+from pydlutils.thirdparty.colmap import read_write_model
 
 
 def str_to_float_list(data: str) -> List:
