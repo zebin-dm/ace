@@ -4,9 +4,11 @@ test_data_cfg:
   image_height: 736
 
 net_cfg:
-  type: NetConfig
-  encoder_path: /mnt/nas/share-all/caizebin/03.dataset/ace/pretrained/ace_encoder_pretrained.pt
-  head_path: ./output/office_table_train/dstpath.pt
+  type: Regressor
+  num_head_blocks: 1
+  use_homogeneous: True
+  encode_pretrained: /mnt/nas/share-all/caizebin/03.dataset/ace/pretrained/ace_encoder_pretrained.pt
+  head_pretrained: ./output/office_table_train/dstpath.pt
 dsac_cfg:
   type: DSACStarConfig
 
