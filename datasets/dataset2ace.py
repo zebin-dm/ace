@@ -62,7 +62,7 @@ class DataSet2Ace():
           0   fy  cy
           0   0   1
         """
-        fx, fy, cx, cy = intrinsic.tolist()
+        fx, fy, cx, cy = intrinsic.tolist()[:4]
         return np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1]])
 
     def generate_vlp2ace(self):
@@ -88,12 +88,11 @@ class DataSet2Ace():
             np.savetxt(save_posef, pose)
             np.savetxt(save_calif, intrinsic)
 
-    def generate_colmap2ace(self):
-        sparse_path = f"{self.src_path}/sparse"
+    def generate_colmap2ace(self, sparse_name="sparse"):
+        sparse_path = f"{self.src_path}/{sparse_name}"
         images_path = f"{self.src_path}/images"
         images_bin_file = f"{sparse_path}/images.bin"
         cameras_bin_file = f"{sparse_path}/cameras.bin"
-        # imfs = glob.glob(f"{images_path}/*.jpg")
         images = read_write_model.read_images_binary(images_bin_file)
         cameras = read_write_model.read_cameras_binary(cameras_bin_file)
         logger.info(f"the file number is: {len(images)}")
@@ -109,7 +108,7 @@ class DataSet2Ace():
             save_imf = f"{rgb_path}/{file_name}.color.png"
             shutil.copy(src_imf, save_imf)
 
-            transform = Transform(quat=image.qvec, pos=image.tvec)
+            transform = Transform(quat=image.qvec, pos=image.tvec).inverse()
             save_posef = f"{poses_path}/{file_name}.pose.txt"
             np.savetxt(save_posef, transform.matrix)
 
@@ -263,6 +262,25 @@ def test_colmap2ace():
     generator.generate_colmap2ace()
 
 
+def test_vlpcolmap2ace():
+    src_path = "/mnt/nas/share-all/caizebin/03.dataset/car/src"
+    dst_path = "/mnt/nas/share-all/caizebin/03.dataset/car/dst"
+    sessions = [
+        "20230420104554_colmap",
+    ]
+    for sess in sessions:
+        print(f"Processing session: {sess}")
+        config = {
+            "src_path": f"{src_path}/{sess}",
+            "dst_path": f"{dst_path}/{sess}",
+        }
+        if os.path.exists(config["dst_path"]):
+            continue
+
+        generator = DataSet2Ace(config)
+        generator.generate_colmap2ace(sparse_name="sparse/0")
+
+
 def test_ace_visulize():
     datapath1 = "/mnt/nas/share-all/caizebin/03.dataset/ace/dstpath/7scenes_chess/test"
     datapath2 = "/mnt/nas/share-all/caizebin/03.dataset/ace/dstpath/7scenes_chess/test"
@@ -305,9 +323,10 @@ def test_ace_visulize_food_and_printer():
     visualize.visualize(datapath1=datapath1, datapath2=datapath2, name1=name1, name2=name2)
 
 
-def test_ace_visulize_colmap():
-    datapath = "/mnt/nas/share-all/caizebin/03.dataset/ace/minimum/dst_path/temple_nara_japan/train"
-    name1 = "99929260_2648147496"
-    name2 = "99949238_8936938996"
+def test_ace_visulize_vlpcolmap():
+    datapath1 = "/mnt/nas/share-all/caizebin/03.dataset/car/dst/20230420104554_colmap"
+    datapath2 = "/mnt/nas/share-all/caizebin/03.dataset/car/dst/20230420104554_colmap"
+    name1 = "571374958053"
+    name2 = "570894826074"
     visualize = ACEVisualize()
-    visualize.visualize(datapath, name1, name2)
+    visualize.visualize(datapath1=datapath1, datapath2=datapath2, name1=name1, name2=name2)

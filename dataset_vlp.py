@@ -315,27 +315,27 @@ class CamLocDatasetVLP(Dataset):
         pose = self._load_pose(idx)
 
         # Apply data augmentation if necessary.
-        if self.training:
-            angle = random.uniform(-self.aug_rotation, self.aug_rotation)
-            if self.debug:
-                debug_image = debug_image / 255.0
-                debug_image = rotate(debug_image, angle, order=1, mode='reflect')
-                logger.info(f"rotate imgae shape: {debug_image.shape}, {debug_image.dtype}")
-                debug_image = debug_image * 255.0
-                debug_image = debug_image.astype(np.uint8)
+        # if self.training:
+        #     angle = random.uniform(-self.aug_rotation, self.aug_rotation)
+        #     if self.debug:
+        #         debug_image = debug_image / 255.0
+        #         debug_image = rotate(debug_image, angle, order=1, mode='reflect')
+        #         logger.info(f"rotate imgae shape: {debug_image.shape}, {debug_image.dtype}")
+        #         debug_image = debug_image * 255.0
+        #         debug_image = debug_image.astype(np.uint8)
 
-            image = self._rotate_image(image, angle, 1, 'reflect')
-            image_mask = self._rotate_image(image_mask, angle, order=1, mode='constant')
-            # Rotate ground truth camera pose as well.
-            angle = angle * math.pi / 180.
-            # Create a rotation matrix.
-            pose_rot = torch.eye(4)
-            pose_rot[0, 0] = math.cos(angle)
-            pose_rot[0, 1] = -math.sin(angle)
-            pose_rot[1, 0] = math.sin(angle)
-            pose_rot[1, 1] = math.cos(angle)
-            # Apply rotation matrix to the ground truth camera pose.
-            pose = torch.matmul(pose, pose_rot)
+        #     image = self._rotate_image(image, angle, 1, 'reflect')
+        #     image_mask = self._rotate_image(image_mask, angle, order=1, mode='constant')
+        #     # Rotate ground truth camera pose as well.
+        #     angle = angle * math.pi / 180.
+        #     # Create a rotation matrix.
+        #     pose_rot = torch.eye(4)
+        #     pose_rot[0, 0] = math.cos(angle)
+        #     pose_rot[0, 1] = -math.sin(angle)
+        #     pose_rot[1, 0] = math.sin(angle)
+        #     pose_rot[1, 1] = math.cos(angle)
+        #     # Apply rotation matrix to the ground truth camera pose.
+        #     pose = torch.matmul(pose, pose_rot)
 
         if self.use_half:
             image = image.half()
