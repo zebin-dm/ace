@@ -1,0 +1,22 @@
+test_data_cfg:
+  type: CamLocDatasetVLP
+  root_dir: /mnt/nas/share-all/caizebin/03.dataset/car/dst/20230706T150716+0800_Capture_OPPO_PEEM00_1
+  image_height: 736
+
+net_cfg:
+  type: Regressor
+  num_head_blocks: 1
+  use_homogeneous: True
+  encode_pretrained: /mnt/nas/share-all/caizebin/03.dataset/ace/pretrained/ace_encoder_pretrained.pt
+  head_pretrained: ./output/20230706T150716+0800_Capture_OPPO_PEEM00_1_train/dst.pt
+
+dsac_cfg:
+  type: DSACStarConfig
+
+render_cfg:
+  type: RenderConfig
+  visualization: False
+
+exp_cfg:
+  type: ExperimentConfig
+  output_dir: ./output/20230706T150716+0800_Capture_OPPO_PEEM00_1_test

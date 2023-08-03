@@ -6,6 +6,7 @@ from pathlib import Path
 from loguru import logger
 from torch.cuda.amp import autocast
 from torch.utils.data import DataLoader
+from utils.visualize_localization import Sample, PlotTable
 
 import dsacstar
 from ace_visualizer import ACEVisualizer
@@ -55,7 +56,7 @@ if __name__ == '__main__':
                                                  reloc_frame_skip=render_cfg.frame_skip)
 
     metric = Metric()
-
+    sample_list = []
     with torch.no_grad():
         for iter_idx, (image_B1HW, _, gt_pose_B44, _, intrinsics_B33, _, _, filenames) in enumerate(testset_loader):
             image_B1HW = image_B1HW.to(device, non_blocking=True)
@@ -122,7 +123,7 @@ if __name__ == '__main__':
                 r_err = cv2.Rodrigues(r_err)[0]
                 # Extract the angle.
                 r_err = np.linalg.norm(r_err) * 180 / math.pi
-
+                sample_list.append(Sample(imf=frame_path, pose=gt_pose_44, r_err=r_err, t_err=t_err))
                 if ace_visualizer is not None:
                     ace_visualizer.render_reloc_frame(query_pose=gt_pose_44.numpy(),
                                                       query_file=frame_path,
@@ -155,3 +156,5 @@ if __name__ == '__main__':
 
     metric.print()
     pose_log.close()
+    plot_table = PlotTable()
+    plot_table.plot_result(sample_list)

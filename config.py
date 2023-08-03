@@ -33,6 +33,8 @@ class ExperimentConfig:
     learning_rate: float = None
     epochs: int = None
     batch_size: int = None
+    resample: bool = False
+    resample_epoch: int = 1
 
     # For ACE
     training_buffer_size: int = None  # number of patches in the training buffer
