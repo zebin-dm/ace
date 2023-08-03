@@ -116,6 +116,114 @@ class DataSet2Ace():
             save_calif = f"{calibration}/{file_name}.calibration.txt"
             np.savetxt(save_calif, intrinsic)
 
+    def generate_colmap2ace_v2(
+        self,
+        mapping_name,
+        query_name,
+        sparse_name="sparse",
+    ):
+        sparse_path = f"{self.src_path}/{sparse_name}"
+        images_path = f"{self.src_path}/images"
+        images_bin_file = f"{sparse_path}/images.bin"
+        cameras_bin_file = f"{sparse_path}/cameras.bin"
+        images = read_write_model.read_images_binary(images_bin_file)
+        cameras = read_write_model.read_cameras_binary(cameras_bin_file)
+        logger.info(f"the file number is: {len(images)}")
+        mapping_path = f"{self.dst_path}/{mapping_name}"
+        query_path = f"{self.dst_path}/{query_name}"
+
+        rgb_mapping = f"{mapping_path}/rgb"
+        poses_mapping = f"{mapping_path}/poses"
+        calibration_mapping = f"{mapping_path}/calibration"
+
+        rgb_query = f"{query_path}/rgb"
+        poses_query = f"{query_path}/poses"
+        calibration_query = f"{query_path}/calibration"
+        os.makedirs(rgb_mapping, exist_ok=True)
+        os.makedirs(poses_mapping, exist_ok=True)
+        os.makedirs(calibration_mapping, exist_ok=True)
+        os.makedirs(rgb_query, exist_ok=True)
+        os.makedirs(poses_query, exist_ok=True)
+        os.makedirs(calibration_query, exist_ok=True)
+        for idx, (image_id, image) in enumerate(images.items()):
+            file_name = os.path.splitext(os.path.basename(image.name))[0]
+            src_imf = f"{images_path}/{image.name}"
+            transform = Transform(quat=image.qvec, pos=image.tvec).inverse()
+            intrinsic = self.gen_intrinsic_matrix(cameras[image.camera_id].params)
+            if image.name.startswith(mapping_name):
+                save_imf = f"{rgb_mapping}/{file_name}.color.png"
+                save_posef = f"{poses_mapping}/{file_name}.pose.txt"
+                save_calif = f"{calibration_mapping}/{file_name}.calibration.txt"
+            elif image.name.startswith(query_name):
+                save_imf = f"{rgb_query}/{file_name}.color.png"
+                save_posef = f"{poses_query}/{file_name}.pose.txt"
+                save_calif = f"{calibration_query}/{file_name}.calibration.txt"
+            shutil.copy(src_imf, save_imf)
+            np.savetxt(save_posef, transform.matrix)
+            np.savetxt(save_calif, intrinsic)
+
+    def generate_colmap2ace_v3(
+        self,
+        sparse_name="sparse",
+        mapping_names: List = None,
+        query_names: List = None,
+        save_map_name: List = "mapping",
+        save_query_name: str = "query",
+        check_unkonw_sess: bool = True,
+    ):
+        sparse_path = f"{self.src_path}/{sparse_name}"
+        images_path = f"{self.src_path}/images"
+        images_bin_file = f"{sparse_path}/images.bin"
+        cameras_bin_file = f"{sparse_path}/cameras.bin"
+        if os.path.exists(images_bin_file):
+            images = read_write_model.read_images_binary(images_bin_file)
+            cameras = read_write_model.read_cameras_binary(cameras_bin_file)
+        else:
+            images_txt_file = f"{sparse_path}/images.txt"
+            cameras_txt_file = f"{sparse_path}/cameras.txt"
+            images = read_write_model.read_images_text(images_txt_file)
+            cameras = read_write_model.read_cameras_text(cameras_txt_file)
+        logger.info(f"the file number is: {len(images)}")
+        mapping_path = f"{self.dst_path}/{save_map_name}"
+        query_path = f"{self.dst_path}/{save_query_name}"
+
+        rgb_mapping = f"{mapping_path}/rgb"
+        poses_mapping = f"{mapping_path}/poses"
+        calibration_mapping = f"{mapping_path}/calibration"
+
+        rgb_query = f"{query_path}/rgb"
+        poses_query = f"{query_path}/poses"
+        calibration_query = f"{query_path}/calibration"
+        os.makedirs(rgb_mapping, exist_ok=True)
+        os.makedirs(poses_mapping, exist_ok=True)
+        os.makedirs(calibration_mapping, exist_ok=True)
+        os.makedirs(rgb_query, exist_ok=True)
+        os.makedirs(poses_query, exist_ok=True)
+        os.makedirs(calibration_query, exist_ok=True)
+        for idx, (image_id, image) in enumerate(images.items()):
+            sess_name, image_name = image.name.split("/")
+            image_name = os.path.splitext(image_name)[0]
+
+            src_imf = f"{images_path}/{image.name}"
+            transform = Transform(quat=image.qvec, pos=image.tvec).inverse()
+            intrinsic = self.gen_intrinsic_matrix(cameras[image.camera_id].params)
+            if sess_name in mapping_names:
+                save_imf = f"{rgb_mapping}/{sess_name}_{image_name}.color.png"
+                save_posef = f"{poses_mapping}/{sess_name}_{image_name}.pose.txt"
+                save_calif = f"{calibration_mapping}/{sess_name}_{image_name}.calibration.txt"
+            elif sess_name in query_names:
+                save_imf = f"{rgb_query}/{sess_name}_{image_name}.color.png"
+                save_posef = f"{poses_query}/{sess_name}_{image_name}.pose.txt"
+                save_calif = f"{calibration_query}/{sess_name}_{image_name}.calibration.txt"
+            else:
+                if check_unkonw_sess:
+                    raise Exception(f"Unkonw sess: {sess_name}")
+                else:
+                    continue
+            shutil.copy(src_imf, save_imf)
+            np.savetxt(save_posef, transform.matrix)
+            np.savetxt(save_calif, intrinsic)
+
     def generate_ace2ace(self):
         src_rgb_path = f"{self.src_path}/rgb"
         src_poses_path = f"{self.src_path}/poses"
@@ -196,6 +304,104 @@ class ACEVisualize():
 
         visualize_ep(imf1, imf2, pose1, pose2, intrinsic1, intrinsic2)
 
+    def get_max_translation(self, path: str, thresh=10):
+        max_pose = 0
+        max_name = ""
+        number = 0
+        pose_path = f"{path}/poses"
+        name_list = os.listdir(pose_path)
+        for name in name_list:
+            posef = f"{pose_path}/{name}"
+            pose1 = self.load_pose(posef)
+            pose1 = Transform(mat=pose1).inverse().matrix
+            trans = pose1[:3, 3]
+            norm_trans = np.linalg.norm(trans)
+            if norm_trans > max_pose:
+                max_pose = norm_trans
+                max_name = name
+            if norm_trans > thresh:
+                print(norm_trans)
+                number += 1
+        print(f"max_norm: {max_pose}, max_name: {max_name}, out number:{number}/{len(name_list)}")
+
+    def copy(
+        self,
+        srcpath,
+        dstpath,
+        thresh=10,
+    ):
+
+        rgb_src = f"{srcpath}/rgb"
+        poses_src = f"{srcpath}/poses"
+        calibration_src = f"{srcpath}/calibration"
+
+        rgb_dst = f"{dstpath}/rgb"
+        poses_dst = f"{dstpath}/poses"
+        calibration_dst = f"{dstpath}/calibration"
+        os.makedirs(rgb_dst)
+        os.makedirs(poses_dst)
+        os.makedirs(calibration_dst)
+        name_list = os.listdir(poses_src)
+        for name in name_list:
+            name = name.replace(".pose.txt", "")
+            posef = f"{poses_src}/{name}.pose.txt"
+            pose1 = self.load_pose(posef)
+            trans = pose1[:3, 3]
+            norm_trans = np.linalg.norm(trans)
+            if norm_trans > thresh:
+                continue
+            shutil.copy(posef, poses_dst)
+            rgbf = f"{rgb_src}/{name}.color.png"
+            shutil.copy(rgbf, rgb_dst)
+            calibrationf = f"{calibration_src}/{name}.calibration.txt"
+            shutil.copy(calibrationf, calibration_dst)
+
+    def sample(
+        self,
+        srcpath,
+        thresh=10,
+    ):
+
+        rgb_src = f"{srcpath}/rgb"
+        poses_src = f"{srcpath}/poses"
+        calibration_src = f"{srcpath}/calibration"
+        map_path = f"{srcpath}_mapping"
+        query_path = f"{srcpath}_query"
+        rgb_map = f"{map_path}/rgb"
+        poses_map = f"{map_path}/poses"
+        calibration_map = f"{map_path}/calibration"
+        rgb_query = f"{query_path}/rgb"
+        poses_query = f"{query_path}/poses"
+        calibration_query = f"{query_path}/calibration"
+
+        os.makedirs(rgb_map)
+        os.makedirs(poses_map)
+        os.makedirs(calibration_map)
+
+        os.makedirs(rgb_query)
+        os.makedirs(poses_query)
+        os.makedirs(calibration_query)
+        name_list = os.listdir(poses_src)
+        name_list.sort()
+        for idx, name in enumerate(name_list):
+            name = name.replace(".pose.txt", "")
+            posef = f"{poses_src}/{name}.pose.txt"
+            pose1 = self.load_pose(posef)
+            trans = pose1[:3, 3]
+            norm_trans = np.linalg.norm(trans)
+            if norm_trans > thresh:
+                continue
+            rgbf = f"{rgb_src}/{name}.color.png"
+            calibrationf = f"{calibration_src}/{name}.calibration.txt"
+            if idx % 2 == 0:
+                shutil.copy(posef, poses_map)
+                shutil.copy(rgbf, rgb_map)
+                shutil.copy(calibrationf, calibration_map)
+            else:
+                shutil.copy(posef, poses_query)
+                shutil.copy(rgbf, rgb_query)
+                shutil.copy(calibrationf, calibration_query)
+
 
 def test_7scene_chess2ace_test():
     src_path = "/mnt/nas/share-all/caizebin/03.dataset/ace/7scenes_ace/7scenes_chess"
@@ -267,6 +473,7 @@ def test_vlpcolmap2ace():
     dst_path = "/mnt/nas/share-all/caizebin/03.dataset/car/dst"
     sessions = [
         "20230420104554_colmap",
+        "20230706T150716+0800_Capture_OPPO_PEEM00_1",
     ]
     for sess in sessions:
         print(f"Processing session: {sess}")
@@ -279,6 +486,136 @@ def test_vlpcolmap2ace():
 
         generator = DataSet2Ace(config)
         generator.generate_colmap2ace(sparse_name="sparse/0")
+
+
+def test_vlpcolmap2ace_v2():
+    src_path = "/mnt/nas/share-map/experiment/zhentao/qiyu_ace_prod/20230710115743/colmap"
+    dst_path = "/mnt/nas/share-all/caizebin/03.dataset/car/dst/glass"
+    mapping_name = "mobili_qiyu_camera0"
+    query_name = "mobili_qiyu_camera_query"
+    config = {
+        "src_path": src_path,
+        "dst_path": dst_path,
+    }
+
+    generator = DataSet2Ace(config)
+    generator.generate_colmap2ace_v2(
+        sparse_name="sparse/0",
+        mapping_name=mapping_name,
+        query_name=query_name,
+    )
+
+
+def test_vlpcolmap2ace_v2_glass_variation_light():
+    src_path = "/mnt/gz01/experiment/zhentao/cross_temporal_prod/20230710115743/colmap"
+    dst_path = "/mnt/nas/share-all/caizebin/03.dataset/car/dst/glass_variation_light"
+    mapping_name = "mobili_qiyu_camera0"
+    query_name = "mobili_qiyu_camera_query"
+    config = {
+        "src_path": src_path,
+        "dst_path": dst_path,
+    }
+
+    generator = DataSet2Ace(config)
+    generator.generate_colmap2ace_v2(
+        sparse_name="sparse/0",
+        mapping_name=mapping_name,
+        query_name=query_name,
+    )
+
+
+def test_vlpcolmap2ace_v3_19session():
+    src_path = "/mnt/nas/share-all/caizebin/03.dataset/car/mapping_rescale/merge_test_v2/colmap"
+    dst_path = "/mnt/nas/share-all/caizebin/03.dataset/car/dst/19session"
+    # mapping_names = [
+    #     "mobili_qiyu_camera0",
+    #     "mobili_qiyu_camera1",
+    #     "mobili_qiyu_camera3",
+    #     "mobili_qiyu_camera4",
+    #     "mobili_qiyu_camera6",
+    #     "mobili_qiyu_camera7",
+    #     "mobili_qiyu_camera9",
+    #     "mobili_qiyu_camera10",
+    #     "mobili_qiyu_camera12",
+    #     "mobili_qiyu_camera13",
+    #     "mobili_qiyu_camera15",
+    #     "mobili_qiyu_camera16",
+    #     "mobili_qiyu_camera18",
+    # ]
+    # query_names = [
+    #     "mobili_qiyu_camera2",
+    #     "mobili_qiyu_camera5",
+    #     "mobili_qiyu_camera8",
+    #     "mobili_qiyu_camera11",
+    #     "mobili_qiyu_camera14",
+    #     "mobili_qiyu_camera17",
+    # ]
+
+    mapping_names = [
+        "mobili_qiyu_camera0",
+        "mobili_qiyu_camera1",
+        "mobili_qiyu_camera3",
+        "mobili_qiyu_camera4",
+        "mobili_qiyu_camera6",
+        "mobili_qiyu_camera7",
+        "mobili_qiyu_camera8",
+        "mobili_qiyu_camera9",
+        "mobili_qiyu_camera10",
+        "mobili_qiyu_camera11",
+        "mobili_qiyu_camera12",
+        "mobili_qiyu_camera13",
+        "mobili_qiyu_camera14",
+        "mobili_qiyu_camera15",
+        "mobili_qiyu_camera16",
+        "mobili_qiyu_camera17",
+        "mobili_qiyu_camera18",
+    ]
+    query_names = [
+        "mobili_qiyu_camera2",
+        "mobili_qiyu_camera5",
+    ]
+    save_map_name = "mapping17_rescale"
+    save_query_name = "query2_rescale"
+    config = {
+        "src_path": src_path,
+        "dst_path": dst_path,
+    }
+
+    generator = DataSet2Ace(config)
+    generator.generate_colmap2ace_v3(
+        sparse_name="sparse",
+        mapping_names=mapping_names,
+        query_names=query_names,
+        save_map_name=save_map_name,
+        save_query_name=save_query_name,
+    )
+
+
+def test_vlpcolmap2ace_v3_19session_single_query():
+    src_path = "/mnt/nas/share-all/caizebin/03.dataset/car/mapping/merge_test_v2/colmap"
+    dst_path = "/mnt/nas/share-all/caizebin/03.dataset/car/dst/19session"
+    map_name = "mobili_qiyu_camera0"
+    query_name = "mobili_qiyu_camera1"
+    mapping_names = [
+        map_name,
+    ]
+    query_names = [
+        query_name,
+    ]
+    config = {
+        "src_path": src_path,
+        "dst_path": dst_path,
+    }
+
+    generator = DataSet2Ace(config)
+    generator.generate_colmap2ace_v3(
+        sparse_name="sparse",
+        mapping_names=mapping_names,
+        query_names=query_names,
+        save_map_name=map_name,
+        save_query_name=query_name,
+        check_unkonw_sess=False,
+    )
 
 
 def test_ace_visulize():
@@ -324,9 +661,87 @@ def test_ace_visulize_food_and_printer():
 
 
 def test_ace_visulize_vlpcolmap():
-    datapath1 = "/mnt/nas/share-all/caizebin/03.dataset/car/dst/20230420104554_colmap"
-    datapath2 = "/mnt/nas/share-all/caizebin/03.dataset/car/dst/20230420104554_colmap"
-    name1 = "571374958053"
-    name2 = "570894826074"
+    datapath1 = "/mnt/nas/share-all/caizebin/03.dataset/car/dst/glass_variation_light/mobili_qiyu_camera_query"
+    datapath2 = "/mnt/nas/share-all/caizebin/03.dataset/car/dst/glass_variation_light/mobili_qiyu_camera0"
+    name1 = "99949008982"
+    name2 = "288388143178"
     visualize = ACEVisualize()
     visualize.visualize(datapath1=datapath1, datapath2=datapath2, name1=name1, name2=name2)
+
+
+def test_get_max_translation():
+    sess_path = "/mnt/nas/share-all/caizebin/03.dataset/car/dst/19session/mapping17_rescale"
+    thresh = 3
+    visualize = ACEVisualize()
+    visualize.get_max_translation(sess_path, thresh=thresh)
+
+
+def test_filter_sess():
+    src_path = "/mnt/nas/share-all/caizebin/03.dataset/car/dst/19session/mapping17"
+    thresh = 5
+    dst_path = f"{src_path}_filter{thresh}"
+    os.makedirs(dst_path)
+
+    visualize = ACEVisualize()
+    visualize.copy(src_path, dst_path, thresh=thresh)
+
+
+def test_sample_sess():
+    sess_path = "/mnt/nas/share-all/caizebin/03.dataset/car/dst/20230420104554_colmap_filter"
+
+    visualize = ACEVisualize()
+    visualize.sample(sess_path)
+
+
+def test_sample_ace_images():
+    sesses = [
+        "/mnt/nas/share-all/caizebin/03.dataset/car/dst/glass_variation_light/mobili_qiyu_camera0",
+        "/mnt/nas/share-all/caizebin/03.dataset/car/dst/glass_variation_light/mobili_qiyu_camera_query",
+    ]
+
+    map_path = "/mnt/nas/share-all/caizebin/03.dataset/car/dst/glass_variation_light_mix/mapping"
+    query_path = "/mnt/nas/share-all/caizebin/03.dataset/car/dst/glass_variation_light_mix/query"
+    os.makedirs(map_path, exist_ok=True)
+    os.makedirs(query_path, exist_ok=True)
+
+    rgb_map = f"{map_path}/rgb"
+    poses_map = f"{map_path}/poses"
+    calibration_map = f"{map_path}/calibration"
+    rgb_query = f"{query_path}/rgb"
+    poses_query = f"{query_path}/poses"
+    calibration_query = f"{query_path}/calibration"
+
+    os.makedirs(rgb_map)
+    os.makedirs(poses_map)
+    os.makedirs(calibration_map)
+
+    os.makedirs(rgb_query)
+    os.makedirs(poses_query)
+    os.makedirs(calibration_query)
+
+    for srcpath in sesses:
+
+        rgb_src = f"{srcpath}/rgb"
+        poses_src = f"{srcpath}/poses"
+        calibration_src = f"{srcpath}/calibration"
+
+        name_list = os.listdir(poses_src)
+        name_list.sort()
+        for idx, name in enumerate(name_list):
+            name = name.replace(".pose.txt", "")
+            posef = f"{poses_src}/{name}.pose.txt"
+            # pose1 = self.load_pose(posef)
+            # trans = pose1[:3, 3]
+            # norm_trans = np.linalg.norm(trans)
+            # if norm_trans > thresh:
+            #     continue
+            rgbf = f"{rgb_src}/{name}.color.png"
+            calibrationf = f"{calibration_src}/{name}.calibration.txt"
+            if idx % 2 == 0:
+                shutil.copy(posef, poses_map)
+                shutil.copy(rgbf, rgb_map)
+                shutil.copy(calibrationf, calibration_map)
+            else:
+                shutil.copy(posef, poses_query)
+                shutil.copy(rgbf, rgb_query)
+                shutil.copy(calibrationf, calibration_query)

@@ -1,0 +1,21 @@
+test_data_cfg:
+  type: CamLocDatasetVLP
+  root_dir: /mnt/nas/share-all/caizebin/03.dataset/car/dst/glass_variation_light_mix/query
+  image_height: 480
+
+net_cfg:
+  type: Regressor
+  num_head_blocks: 1
+  use_homogeneous: True
+  encode_pretrained: /mnt/nas/share-all/caizebin/03.dataset/ace/pretrained/ace_encoder_pretrained.pt
+  head_pretrained: ./output/mobili_qiyu_camera0_vl_train_480/glass_variation_light_mix.pt
+dsac_cfg:
+  type: DSACStarConfig
+
+render_cfg:
+  type: RenderConfig
+  visualization: false
+
+exp_cfg:
+  type: ExperimentConfig
+  output_dir: ./output/mobili_qiyu_camera0_vl_test

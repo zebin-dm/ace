@@ -1,7 +1,7 @@
 train_data_cfg:
   type: CamLocDatasetVLP
-  root_dir: /mnt/nas/share-all/caizebin/03.dataset/car/dst/20230420104554_colmap_filter
-  image_height: 640
+  root_dir: /mnt/nas/share-all/caizebin/03.dataset/car/dst/19session/mapping17_rescale
+  image_height: 480
   training: True
   use_half: True
   aug_rotation: 15
@@ -25,15 +25,17 @@ render_cfg:
 
 exp_cfg:
   type: ExperimentConfig
-  output_dir: ./output/20230420104554_colmap_train
-  learning_rate: 0.0001
-  epochs: 32
-  batch_size: 5120 # 5120
+  output_dir: ./output/19session_train_mapping17_filter_resample3
+  learning_rate: 0.0005
+  epochs: 64
+  batch_size: 5120
+  resample: False
+  resample_epoch: 1
 
   # For ACE
-  training_buffer_size: 16000000
+  training_buffer_size: 20000000
   samples_per_image: 1024
-  visual_steps: 100
+  visual_steps: 500
 
 reproject_loss:
   type: ReproLoss
@@ -44,6 +46,6 @@ reproject_loss:
   circle_schedule: True
 
 scheduler:
-  max_lr:  0.0001
+  max_lr: 0.005
   cycle_momentum: False
 

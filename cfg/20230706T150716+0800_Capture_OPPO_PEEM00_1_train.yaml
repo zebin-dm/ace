@@ -1,7 +1,7 @@
 train_data_cfg:
   type: CamLocDatasetVLP
-  root_dir: /mnt/nas/share-all/caizebin/03.dataset/car/dst/20230420104554_colmap_filter
-  image_height: 640
+  root_dir: /mnt/nas/share-all/caizebin/03.dataset/car/dst/20230706T150716+0800_Capture_OPPO_PEEM00_1
+  image_height: 736
   training: True
   use_half: True
   aug_rotation: 15
@@ -25,10 +25,10 @@ render_cfg:
 
 exp_cfg:
   type: ExperimentConfig
-  output_dir: ./output/20230420104554_colmap_train
-  learning_rate: 0.0001
-  epochs: 32
-  batch_size: 5120 # 5120
+  output_dir: ./output/20230706T150716+0800_Capture_OPPO_PEEM00_1_train
+  learning_rate: 0.0005
+  epochs: 64
+  batch_size: 5120
 
   # For ACE
   training_buffer_size: 16000000
@@ -44,6 +44,6 @@ reproject_loss:
   circle_schedule: True
 
 scheduler:
-  max_lr:  0.0001
+  max_lr: 0.005
   cycle_momentum: False
 

@@ -40,6 +40,26 @@ class TrainerACE:
         self.regressor = ACE_REGISTRY.build(net_cfg)
         self.regressor = self.regressor.to(self.device)
 
+        # used to seed individual workers by the dataloader.
+        batch_generator = self.create_generator(self.exp_cfg.seed + 1023)
+        loader_generator = self.create_generator(self.exp_cfg.seed + 511)
+        batch_sampler = sampler.BatchSampler(
+            sampler.RandomSampler(self.dataset, generator=batch_generator),
+            batch_size=1,
+            drop_last=False,
+        )
+
+        self.trainloader = DataLoader(
+            dataset=self.dataset,
+            sampler=batch_sampler,
+            batch_size=None,
+            worker_init_fn=seed_worker,
+            generator=loader_generator,
+            pin_memory=True,
+            num_workers=self.workers_number,
+            persistent_workers=self.workers_number > 0,
+            timeout=60 if self.workers_number > 0 else 0,
+        )
         # Setup optimization parameters.
         self.optimizer = optim.AdamW(self.regressor.parameters(), lr=self.exp_cfg.learning_rate)
 
@@ -98,6 +118,8 @@ class TrainerACE:
         self.create_training_buffer()
         # Train the regression head.
         for epoch in range(self.exp_cfg.epochs):
+            if epoch % self.exp_cfg.resample_epoch == 0 and epoch != 0 and self.exp_cfg.resample:
+                self.create_training_buffer()
             self.run_epoch(epoch)
 
         self.save_model()
@@ -112,30 +134,12 @@ class TrainerACE:
     def create_training_buffer(self):
         # Generator used to sample random features (runs on the GPU).
         sampling_generator = self.create_generator(self.exp_cfg.seed + 4095, device=self.device)
-        batch_generator = self.create_generator(self.exp_cfg.seed + 1023)
-        # used to seed individual workers by the dataloader.
-        loader_generator = self.create_generator(self.exp_cfg.seed + 511)
-        batch_sampler = sampler.BatchSampler(
-            sampler.RandomSampler(self.dataset, generator=batch_generator),
-            batch_size=1,
-            drop_last=False,
-        )
-
-        trainloader = DataLoader(
-            dataset=self.dataset,
-            sampler=batch_sampler,
-            batch_size=None,
-            worker_init_fn=seed_worker,
-            generator=loader_generator,
-            pin_memory=True,
-            num_workers=self.workers_number,
-            persistent_workers=self.workers_number > 0,
-            timeout=60 if self.workers_number > 0 else 0,
-        )
 
         logger.info("Starting creation of the training buffer.")
         buffer_size = self.exp_cfg.training_buffer_size
         feat_type = torch.float16 if self.use_half else torch.float32
+        if self.training_buffer is not None:
+            del self.training_buffer
         self.training_buffer = {
             'features': torch.empty((buffer_size, self.regressor.feature_dim), dtype=feat_type, device=self.device),
             'target_px': torch.empty((buffer_size, 2), dtype=torch.float32, device=self.device),
@@ -150,7 +154,7 @@ class TrainerACE:
             dataset_passes = 0
             while buffer_idx < buffer_size:
                 dataset_passes += 1
-                for sample_idx, (image, image_mask, _, gt_pose_inv, intrinsics, intrinsics_inv, _, _) in enumerate(trainloader):
+                for sample_idx, (image, image_mask, _, gt_pose_inv, intrinsics, intrinsics_inv, _, _) in enumerate(self.trainloader):
                     image = image.to(self.device, non_blocking=True)  # Bx1xHxW
                     image_mask = image_mask.to(self.device, non_blocking=True)  # Bx1xHxW
                     gt_pose_inv = gt_pose_inv.to(self.device, non_blocking=True)  # Bx4x4
