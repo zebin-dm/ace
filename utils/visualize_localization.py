@@ -1,3 +1,4 @@
+import os
 import numpy as np
 from typing import List, Dict
 from collections import defaultdict
@@ -60,9 +61,10 @@ class PlotTable:
         ax.set_xlabel("x")
         ax.set_ylabel("y")
         # set the limits of the plot to the limits of the data
+        # ax.axis([xv.min(), xv.max(), yv.min(), yv.max()])
         ax.axis([xv.min(), xv.max(), yv.min(), yv.max()])
         fig.colorbar(c, ax=ax)
-        fig.savefig(f"{figure_name}.png")
+        fig.savefig(f"./output/{figure_name}.png")
 
     def plot_result(self, samples: List[Sample], sample_distance: float = 0.01):
         translation_statistic = defaultdict(list)
@@ -78,5 +80,18 @@ class PlotTable:
         for key in translation_statistic.keys():
             translation_statistic[key] = average(translation_statistic[key])
             rotation_statistic[key] = average(rotation_statistic[key])
-        self.draw_figure(translation_statistic, "translation")
-        self.draw_figure(rotation_statistic, "rotation")
+        self.draw_figure(translation_statistic, "translation", sample_distance=sample_distance)
+        self.draw_figure(rotation_statistic, "rotation", sample_distance=sample_distance)
+
+    @staticmethod
+    def save_result(samples: List[Sample], save_path: str):
+        os.makedirs(save_path, exist_ok=True)
+        meta_file = f"{save_path}/meta.txt"
+        with open(meta_file, "w") as fh:
+
+            for sample in samples:
+                im_name = os.path.basename(sample.imf).replace(".color.png", "")
+
+                save_file = f"{save_path}/{im_name}_pose.txt"
+                np.savetxt(save_file, sample.pose)
+                fh.write(f"{save_file} {sample.r_err} {sample.t_err}\n")
