@@ -56,7 +56,8 @@ if __name__ == '__main__':
                                                  reloc_frame_skip=render_cfg.frame_skip)
 
     metric = Metric()
-    sample_list = []
+    sample_gt = []
+    sample_pred = []
     with torch.no_grad():
         for iter_idx, (image_B1HW, _, gt_pose_B44, _, intrinsics_B33, _, _, filenames) in enumerate(testset_loader):
             image_B1HW = image_B1HW.to(device, non_blocking=True)
@@ -123,7 +124,8 @@ if __name__ == '__main__':
                 r_err = cv2.Rodrigues(r_err)[0]
                 # Extract the angle.
                 r_err = np.linalg.norm(r_err) * 180 / math.pi
-                sample_list.append(Sample(imf=frame_path, pose=gt_pose_44, r_err=r_err, t_err=t_err))
+                sample_gt.append(Sample(imf=frame_path, pose=gt_pose_44, r_err=r_err, t_err=t_err))
+                sample_pred.append(Sample(imf=frame_path, pose=out_pose, r_err=r_err, t_err=t_err))
                 if ace_visualizer is not None:
                     ace_visualizer.render_reloc_frame(query_pose=gt_pose_44.numpy(),
                                                       query_file=frame_path,
@@ -157,4 +159,8 @@ if __name__ == '__main__':
     metric.print()
     pose_log.close()
     plot_table = PlotTable()
-    plot_table.plot_result(sample_list)
+    # plot_table.plot_result(sample_list)
+    save_gt_path = "/mnt/nas/share-all/caizebin/03.dataset/car/dst/19session/query2_rescale_visualize_gt"
+    save_pred_path = "/mnt/nas/share-all/caizebin/03.dataset/car/dst/19session/query2_rescale_visualize_pred"
+    plot_table.save_result(sample_gt, save_path=save_gt_path)
+    plot_table.save_result(sample_pred, save_path=save_pred_path)
