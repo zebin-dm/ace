@@ -591,6 +591,39 @@ def test_vlpcolmap2ace_v3_19session():
     )
 
 
+def test_vlpcolmap2ace_v3_dense_2session():
+    src_path = "/mnt/nas/share-all/caizebin/03.dataset/car/mappingml001/rescale/dense_2session/colmap"
+    dst_path = "/mnt/nas/share-all/caizebin/03.dataset/car/mappingml001/dataset/dense_2session"
+
+    mapping_names = [
+        "mobili_qiyu_camera0",
+        "mobili_qiyu_camera1",
+        "mobili_qiyu_camera2",
+        "mobili_qiyu_camera3",
+    ]
+    query_names = [
+        "mobili_qiyu_camera4",
+        "mobili_qiyu_camera5",
+        "mobili_qiyu_camera6",
+        "mobili_qiyu_camera7",
+    ]
+    save_map_name = "mapping"
+    save_query_name = "query"
+    config = {
+        "src_path": src_path,
+        "dst_path": dst_path,
+    }
+
+    generator = DataSet2Ace(config)
+    generator.generate_colmap2ace_v3(
+        sparse_name="sparse",
+        mapping_names=mapping_names,
+        query_names=query_names,
+        save_map_name=save_map_name,
+        save_query_name=save_query_name,
+    )
+
+
 def test_vlpcolmap2ace_v3_19session_single_query():
     src_path = "/mnt/nas/share-all/caizebin/03.dataset/car/mapping/merge_test_v2/colmap"
     dst_path = "/mnt/nas/share-all/caizebin/03.dataset/car/dst/19session"
